@@ -1,0 +1,355 @@
+"use client";
+
+import { useState } from "react";
+import {
+  Building2,
+  Globe,
+  Clock,
+  Bell,
+  BellOff,
+  Save,
+  AlertTriangle,
+  Trash2,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+
+export default function SettingsPage() {
+  const [orgName, setOrgName] = useState("Acme Health Research");
+  const [orgSlug, setOrgSlug] = useState("acme-health");
+  const [language, setLanguage] = useState("en");
+  const [timezone, setTimezone] = useState("America/New_York");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+
+  const [notifications, setNotifications] = useState({
+    surveyResponses: true,
+    weeklyDigest: true,
+    teamInvites: true,
+    surveyCompletion: true,
+    productUpdates: false,
+    securityAlerts: true,
+  });
+
+  const toggleNotification = (key: keyof typeof notifications) => {
+    setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const notificationItems = [
+    {
+      key: "surveyResponses" as const,
+      label: "New survey responses",
+      description: "Get notified when someone submits a response",
+      icon: Bell,
+    },
+    {
+      key: "weeklyDigest" as const,
+      label: "Weekly digest",
+      description: "Summary of survey activity every Monday",
+      icon: Bell,
+    },
+    {
+      key: "teamInvites" as const,
+      label: "Team invitations",
+      description: "When someone joins or is invited to your org",
+      icon: Bell,
+    },
+    {
+      key: "surveyCompletion" as const,
+      label: "Survey completion",
+      description: "When a survey reaches its response target",
+      icon: Bell,
+    },
+    {
+      key: "productUpdates" as const,
+      label: "Product updates",
+      description: "New features and platform announcements",
+      icon: BellOff,
+    },
+    {
+      key: "securityAlerts" as const,
+      label: "Security alerts",
+      description: "Unusual login activity and security events",
+      icon: Bell,
+    },
+  ];
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">General Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage your organization settings and preferences.
+        </p>
+      </div>
+
+      {/* Organization Info */}
+      <div className="rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <Building2 className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-card-foreground">
+              Organization
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Basic organization details
+            </p>
+          </div>
+        </div>
+        <div className="space-y-5 p-6">
+          <div className="space-y-2">
+            <Label htmlFor="org-name">Organization name</Label>
+            <Input
+              id="org-name"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              placeholder="Your organization name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="org-slug">Organization slug</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                opendelphi.com/
+              </span>
+              <Input
+                id="org-slug"
+                value={orgSlug}
+                onChange={(e) => setOrgSlug(e.target.value)}
+                placeholder="your-org"
+                className="max-w-[200px]"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Used in public survey URLs and API endpoints.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Default Survey Settings */}
+      <div className="rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <Globe className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-card-foreground">
+              Default Survey Settings
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Defaults applied to newly created surveys
+            </p>
+          </div>
+        </div>
+        <div className="space-y-5 p-6">
+          <div className="space-y-2">
+            <Label>Default language</Label>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger className="max-w-[260px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="es">Spanish</SelectItem>
+                <SelectItem value="fr">French</SelectItem>
+                <SelectItem value="de">German</SelectItem>
+                <SelectItem value="pt">Portuguese</SelectItem>
+                <SelectItem value="ja">Japanese</SelectItem>
+                <SelectItem value="zh">Chinese (Simplified)</SelectItem>
+                <SelectItem value="ar">Arabic</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Timezone</Label>
+            <Select value={timezone} onValueChange={setTimezone}>
+              <SelectTrigger className="max-w-[260px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="America/New_York">
+                  Eastern Time (ET)
+                </SelectItem>
+                <SelectItem value="America/Chicago">
+                  Central Time (CT)
+                </SelectItem>
+                <SelectItem value="America/Denver">
+                  Mountain Time (MT)
+                </SelectItem>
+                <SelectItem value="America/Los_Angeles">
+                  Pacific Time (PT)
+                </SelectItem>
+                <SelectItem value="Europe/London">
+                  Greenwich Mean Time (GMT)
+                </SelectItem>
+                <SelectItem value="Europe/Berlin">
+                  Central European Time (CET)
+                </SelectItem>
+                <SelectItem value="Asia/Tokyo">
+                  Japan Standard Time (JST)
+                </SelectItem>
+                <SelectItem value="Asia/Shanghai">
+                  China Standard Time (CST)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              <span>All survey schedules and analytics use this timezone</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Notification Preferences */}
+      <div className="rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <Bell className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-card-foreground">
+              Email Notifications
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Choose which emails you want to receive
+            </p>
+          </div>
+        </div>
+        <div className="divide-y divide-border">
+          {notificationItems.map((item) => (
+            <div
+              key={item.key}
+              className="flex items-center justify-between px-6 py-4"
+            >
+              <div className="flex-1">
+                <p className="text-sm font-medium text-card-foreground">
+                  {item.label}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {item.description}
+                </p>
+              </div>
+              <Switch
+                checked={notifications[item.key]}
+                onCheckedChange={() => toggleNotification(item.key)}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+          <Save className="h-4 w-4" />
+          Save Changes
+        </button>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="rounded-2xl border border-destructive/30 bg-card">
+        <div className="flex items-center gap-3 border-b border-destructive/30 px-6 py-4">
+          <div className="rounded-xl bg-destructive/10 p-2">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-destructive">
+              Danger Zone
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Irreversible actions — proceed with caution
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between p-6">
+          <div>
+            <p className="text-sm font-medium text-card-foreground">
+              Delete organization
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Permanently delete this organization and all its data. This cannot
+              be undone.
+            </p>
+          </div>
+          <Dialog>
+            <DialogTrigger asChild>
+              <button className="inline-flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10">
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Organization</DialogTitle>
+                <DialogDescription>
+                  This action is permanent and cannot be undone. All surveys,
+                  responses, and team members will be permanently removed.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-4">
+                <div className="rounded-lg bg-destructive/5 p-3 text-sm text-destructive">
+                  <p className="font-medium">You will lose:</p>
+                  <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs">
+                    <li>24 surveys and all response data</li>
+                    <li>4,821 survey responses</li>
+                    <li>8 team member accounts</li>
+                    <li>All integrations and API keys</li>
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="delete-confirm">
+                    Type <span className="font-mono font-bold">{orgSlug}</span>{" "}
+                    to confirm
+                  </Label>
+                  <Input
+                    id="delete-confirm"
+                    value={deleteConfirm}
+                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                    placeholder={orgSlug}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <button className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-card-foreground transition-colors hover:bg-accent">
+                    Cancel
+                  </button>
+                </DialogClose>
+                <button
+                  disabled={deleteConfirm !== orgSlug}
+                  className="rounded-xl bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete Organization
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+    </div>
+  );
+}
