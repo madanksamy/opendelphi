@@ -117,16 +117,18 @@ function FieldRenderer({
       return (
         <div className="space-y-2">
           {field.options?.map((opt) => (
-            <label
+            <button
               key={opt.id}
+              type="button"
+              onClick={() => onChange(opt.value)}
               className={cn(
-                "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent",
+                "flex w-full items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent text-left",
                 value === opt.value && "border-primary bg-primary/5"
               )}
             >
               <div
                 className={cn(
-                  "h-4 w-4 rounded-full border-2 flex items-center justify-center transition-colors",
+                  "h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors",
                   value === opt.value
                     ? "border-primary"
                     : "border-muted-foreground/30"
@@ -137,7 +139,7 @@ function FieldRenderer({
                 )}
               </div>
               <span className="text-sm">{opt.label}</span>
-            </label>
+            </button>
           ))}
         </div>
       );
@@ -150,16 +152,18 @@ function FieldRenderer({
               ? (value as string[]).includes(opt.value)
               : false;
             return (
-              <label
+              <button
                 key={opt.id}
+                type="button"
+                onClick={() => onChange(opt.value)}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent",
+                  "flex w-full items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-accent text-left",
                   selected && "border-primary bg-primary/5"
                 )}
               >
                 <div
                   className={cn(
-                    "h-4 w-4 rounded border flex items-center justify-center transition-colors",
+                    "h-4 w-4 shrink-0 rounded border flex items-center justify-center transition-colors",
                     selected
                       ? "border-primary bg-primary"
                       : "border-muted-foreground/30"
@@ -182,7 +186,7 @@ function FieldRenderer({
                   )}
                 </div>
                 <span className="text-sm">{opt.label}</span>
-              </label>
+              </button>
             );
           })}
         </div>
