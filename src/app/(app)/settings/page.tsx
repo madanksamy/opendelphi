@@ -16,6 +16,7 @@ import {
   User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EditableText } from "@/components/cms/EditableText";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -92,7 +93,10 @@ export default function SettingsPage() {
     useState<NotificationPreferences>(defaultNotifications);
 
   const loadData = useCallback(async () => {
-    if (!orgId || !user) return;
+    if (!orgId || !user) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -233,10 +237,18 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-3xl space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">General Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage your organization settings and preferences.
-        </p>
+        <EditableText
+          id="settings-heading"
+          defaultContent="General Settings"
+          as="h1"
+          className="text-2xl font-bold text-foreground"
+        />
+        <EditableText
+          id="settings-subheading"
+          defaultContent="Manage your organization settings and preferences."
+          as="p"
+          className="mt-1 text-sm text-muted-foreground"
+        />
       </div>
 
       {/* Profile Info */}

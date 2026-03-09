@@ -14,6 +14,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EditableText } from "@/components/cms/EditableText";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/components/providers/UserProvider";
@@ -145,15 +146,23 @@ export default function AiStudioPage() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-foreground">AI Studio</h1>
+          <EditableText
+            id="ai-studio-heading"
+            defaultContent="AI Studio"
+            as="h1"
+            className="text-2xl font-bold text-foreground"
+          />
           <Badge className="gap-1">
             <Sparkles className="h-3 w-3" />
             Beta
           </Badge>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Generate surveys, use voice input, and get AI-powered support.
-        </p>
+        <EditableText
+          id="ai-studio-subheading"
+          defaultContent="Generate surveys, use voice input, and get AI-powered support."
+          as="p"
+          className="mt-1 text-sm text-muted-foreground"
+        />
       </div>
 
       {/* Tabs */}

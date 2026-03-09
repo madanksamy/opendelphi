@@ -17,6 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EditableText } from "@/components/cms/EditableText";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/components/providers/UserProvider";
 
@@ -188,7 +189,10 @@ export default function IntegrationsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchIntegrations = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     const supabase = createClient();
     const { data } = await supabase
       .from("integrations")
@@ -283,10 +287,18 @@ export default function IntegrationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Connect OpenDelphi with your favorite tools and services.
-          </p>
+          <EditableText
+            id="integrations-heading"
+            defaultContent="Integrations"
+            as="h1"
+            className="text-2xl font-bold text-foreground"
+          />
+          <EditableText
+            id="integrations-subheading"
+            defaultContent="Connect OpenDelphi with your favorite tools and services."
+            as="p"
+            className="mt-1 text-sm text-muted-foreground"
+          />
         </div>
         <Badge variant="secondary" className="gap-1.5">
           <Link2 className="h-3.5 w-3.5" />

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
   BarChart3,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useUser } from "@/components/providers/UserProvider";
 import { createClient } from "@/lib/supabase/client";
+import { EditableText } from "@/components/cms/EditableText";
 
 interface SurveyRow {
   id: string;
@@ -56,10 +57,13 @@ export default function DashboardPage() {
   const [totalResponses, setTotalResponses] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId) {
+      setDataLoading(false);
+      return;
+    }
 
     async function loadDashboard() {
       // Fetch surveys with response counts
@@ -146,12 +150,18 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-7xl space-y-8">
       {/* Welcome */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Welcome back, {displayName}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Here&apos;s an overview of your surveys and recent activity.
-        </p>
+        <EditableText
+          id="dashboard-heading"
+          defaultContent={`Welcome back, ${displayName}`}
+          as="h1"
+          className="text-2xl font-bold text-foreground"
+        />
+        <EditableText
+          id="dashboard-subheading"
+          defaultContent="Here's an overview of your surveys and recent activity."
+          as="p"
+          className="mt-1 text-sm text-muted-foreground"
+        />
       </div>
 
       {/* Stats */}
@@ -204,9 +214,12 @@ export default function DashboardPage() {
       {/* Recent Surveys Table */}
       <div className="rounded-2xl border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-lg font-semibold text-card-foreground">
-            Recent Surveys
-          </h2>
+          <EditableText
+            id="dashboard-recent-surveys-heading"
+            defaultContent="Recent Surveys"
+            as="h2"
+            className="text-lg font-semibold text-card-foreground"
+          />
           <Link
             href="/surveys"
             className="flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80"

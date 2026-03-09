@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EditableText } from "@/components/cms/EditableText";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -102,7 +103,10 @@ export default function DelphiPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const fetchStudies = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -238,10 +242,18 @@ export default function DelphiPage() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Delphi Studies</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage multi-round expert consensus studies using the Delphi method.
-          </p>
+          <EditableText
+            id="delphi-heading"
+            defaultContent="Delphi Studies"
+            as="h1"
+            className="text-2xl font-bold tracking-tight"
+          />
+          <EditableText
+            id="delphi-subheading"
+            defaultContent="Manage multi-round expert consensus studies using the Delphi method."
+            as="p"
+            className="text-sm text-muted-foreground"
+          />
         </div>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />

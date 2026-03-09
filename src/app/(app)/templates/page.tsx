@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EditableText } from "@/components/cms/EditableText";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -416,13 +417,18 @@ export default function TemplatesPage() {
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Survey Templates
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Start from professionally designed templates. Customize any template to
-          fit your needs.
-        </p>
+        <EditableText
+          id="templates-heading"
+          defaultContent="Survey Templates"
+          as="h1"
+          className="text-2xl font-bold tracking-tight"
+        />
+        <EditableText
+          id="templates-subheading"
+          defaultContent="Start from professionally designed templates. Customize any template to fit your needs."
+          as="p"
+          className="text-sm text-muted-foreground"
+        />
       </div>
 
       {/* Search + category filter */}

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EditableText } from "@/components/cms/EditableText";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -70,10 +71,13 @@ export default function SurveysPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId) {
+      setDataLoading(false);
+      return;
+    }
 
     async function loadSurveys() {
       const { data: surveyData } = await supabase
@@ -135,10 +139,18 @@ export default function SurveysPage() {
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Surveys</h1>
-          <p className="mt-1 text-muted-foreground">
-            Create, manage, and analyze your surveys and forms
-          </p>
+          <EditableText
+            id="surveys-heading"
+            defaultContent="Surveys"
+            as="h1"
+            className="text-3xl font-bold tracking-tight"
+          />
+          <EditableText
+            id="surveys-subheading"
+            defaultContent="Create, manage, and analyze your surveys and forms"
+            as="p"
+            className="mt-1 text-muted-foreground"
+          />
         </div>
         <Link href="/surveys/new">
           <Button>

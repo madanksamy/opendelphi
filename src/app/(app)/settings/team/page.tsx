@@ -105,7 +105,10 @@ export default function TeamPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const loadMembers = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase
       .from("org_members")

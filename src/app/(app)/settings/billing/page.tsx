@@ -127,7 +127,10 @@ export default function BillingPage() {
   const [memberCount, setMemberCount] = useState(0);
 
   const loadBillingData = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
