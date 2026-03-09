@@ -2,8 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { v4 as uuidv4 } from "uuid";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,31 +24,67 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { useUser } from "@/components/providers/UserProvider";
+import { createClient } from "@/lib/supabase/client";
 
 export default function NewSurveyPage() {
   const router = useRouter();
+  const { user, orgId } = useUser();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState<"survey" | "form" | "quiz" | "poll">("survey");
+  const [type, setType] = useState<string>("standard");
   const [allowAnonymous, setAllowAnonymous] = useState(true);
   const [showProgressBar, setShowProgressBar] = useState(true);
   const [showQuestionNumbers, setShowQuestionNumbers] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const supabase = createClient();
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !orgId || !user) return;
 
     setIsSubmitting(true);
+    setError("");
 
-    // For now, generate a mock ID and redirect to the editor
-    // In production, this would call an API to create the survey
-    const surveyId = uuidv4();
+    const slug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60)
+      + "-" + Date.now().toString(36);
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    const { data, error: insertError } = await supabase
+      .from("surveys")
+      .insert({
+        org_id: orgId,
+        created_by: user.id,
+        title: title.trim(),
+        description: description.trim() || null,
+        slug,
+        type,
+        status: "draft",
+        schema: [],
+        settings: {
+          allowAnonymous,
+          showProgressBar,
+          showQuestionNumbers,
+        },
+        is_anonymous: allowAnonymous,
+      })
+      .select("id")
+      .single();
 
-    router.push(`/surveys/${surveyId}/edit`);
+    if (insertError) {
+      setError(insertError.message);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (data) {
+      router.push(`/surveys/${data.id}/edit`);
+    }
   };
 
   return (
@@ -74,6 +109,12 @@ export default function NewSurveyPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {error && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="title">Title *</Label>
               <Input
@@ -99,22 +140,24 @@ export default function NewSurveyPage() {
 
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
+              <Select value={type} onValueChange={setType}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="survey">Survey</SelectItem>
-                  <SelectItem value="form">Form</SelectItem>
-                  <SelectItem value="quiz">Quiz</SelectItem>
-                  <SelectItem value="poll">Poll</SelectItem>
+                  <SelectItem value="standard">Survey</SelectItem>
+                  <SelectItem value="delphi">Delphi Consensus</SelectItem>
+                  <SelectItem value="meeting_feedback">Meeting Feedback</SelectItem>
+                  <SelectItem value="product_review">Product Review</SelectItem>
+                  <SelectItem value="satisfaction">Satisfaction</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {type === "survey" && "Collect responses with various question types"}
-                {type === "form" && "Collect structured data with form fields"}
-                {type === "quiz" && "Test knowledge with scored questions"}
-                {type === "poll" && "Quick voting on a single question"}
+                {type === "standard" && "Collect responses with various question types"}
+                {type === "delphi" && "Multi-round expert consensus panels"}
+                {type === "meeting_feedback" && "Collect post-meeting feedback"}
+                {type === "product_review" && "Gather product reviews and ratings"}
+                {type === "satisfaction" && "Measure satisfaction scores"}
               </p>
             </div>
 
@@ -166,7 +209,8 @@ export default function NewSurveyPage() {
                 Cancel
               </Button>
             </Link>
-            <Button type="submit" disabled={!title.trim() || isSubmitting}>
+            <Button type="submit" disabled={!title.trim() || isSubmitting || !orgId}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isSubmitting ? "Creating..." : "Create & Open Builder"}
             </Button>
           </CardFooter>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   Plus,
@@ -10,13 +10,13 @@ import {
   BarChart3,
   Clock,
   Filter,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
-  CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -30,77 +30,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils/cn";
+import { useUser } from "@/components/providers/UserProvider";
+import { createClient } from "@/lib/supabase/client";
 
-// Mock data
-const MOCK_SURVEYS = [
-  {
-    id: "1",
-    title: "Customer Satisfaction Survey 2024",
-    type: "survey" as const,
-    status: "published" as const,
-    responseCount: 342,
-    updatedAt: "2024-03-05T10:30:00Z",
-    description: "Annual customer satisfaction measurement",
-  },
-  {
-    id: "2",
-    title: "Employee Engagement Poll",
-    type: "poll" as const,
-    status: "draft" as const,
-    responseCount: 0,
-    updatedAt: "2024-03-04T14:20:00Z",
-    description: "Quick pulse check on team morale",
-  },
-  {
-    id: "3",
-    title: "Product Feedback Form",
-    type: "form" as const,
-    status: "published" as const,
-    responseCount: 89,
-    updatedAt: "2024-03-03T09:15:00Z",
-    description: "Collect feedback on new feature releases",
-  },
-  {
-    id: "4",
-    title: "Onboarding Knowledge Quiz",
-    type: "quiz" as const,
-    status: "closed" as const,
-    responseCount: 156,
-    updatedAt: "2024-02-28T16:45:00Z",
-    description: "Test new hire knowledge after onboarding",
-  },
-  {
-    id: "5",
-    title: "Market Research Survey",
-    type: "survey" as const,
-    status: "draft" as const,
-    responseCount: 0,
-    updatedAt: "2024-03-01T11:00:00Z",
-    description: "Understanding market trends and preferences",
-  },
-  {
-    id: "6",
-    title: "Event Registration Form",
-    type: "form" as const,
-    status: "archived" as const,
-    responseCount: 203,
-    updatedAt: "2024-01-15T08:30:00Z",
-    description: "Registration for annual company event",
-  },
-];
+interface SurveyItem {
+  id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  status: string;
+  response_count: number;
+  updated_at: string;
+}
 
-const STATUS_CONFIG = {
-  draft: { label: "Draft", variant: "secondary" as const, className: "bg-slate-100 text-slate-700" },
-  published: { label: "Published", variant: "default" as const, className: "bg-green-100 text-green-700" },
-  closed: { label: "Closed", variant: "outline" as const, className: "bg-amber-100 text-amber-700" },
-  archived: { label: "Archived", variant: "outline" as const, className: "bg-gray-100 text-gray-500" },
-};
-
-const TYPE_ICONS = {
-  survey: FileText,
-  form: FileText,
-  quiz: BarChart3,
-  poll: BarChart3,
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  draft: { label: "Draft", className: "bg-slate-100 text-slate-700" },
+  published: { label: "Published", className: "bg-green-100 text-green-700" },
+  closed: { label: "Closed", className: "bg-amber-100 text-amber-700" },
+  archived: { label: "Archived", className: "bg-gray-100 text-gray-500" },
 };
 
 function formatDate(dateStr: string) {
@@ -117,19 +64,71 @@ function formatDate(dateStr: string) {
 }
 
 export default function SurveysPage() {
+  const { orgId, loading: userLoading } = useUser();
+  const [surveys, setSurveys] = useState<SurveyItem[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  const supabase = createClient();
+
+  useEffect(() => {
+    if (!orgId) return;
+
+    async function loadSurveys() {
+      const { data: surveyData } = await supabase
+        .from("surveys")
+        .select("id, title, description, type, status, updated_at")
+        .eq("org_id", orgId)
+        .order("updated_at", { ascending: false });
+
+      if (surveyData && surveyData.length > 0) {
+        // Get response counts
+        const surveyIds = surveyData.map((s: { id: string }) => s.id);
+        const { data: responseCounts } = await supabase
+          .from("responses")
+          .select("survey_id")
+          .in("survey_id", surveyIds);
+
+        const countMap: Record<string, number> = {};
+        (responseCounts || []).forEach((r: { survey_id: string }) => {
+          countMap[r.survey_id] = (countMap[r.survey_id] || 0) + 1;
+        });
+
+        setSurveys(
+          surveyData.map((s: { id: string; title: string; description: string | null; type: string; status: string; updated_at: string }) => ({
+            ...s,
+            response_count: countMap[s.id] || 0,
+          }))
+        );
+      }
+
+      setDataLoading(false);
+    }
+
+    loadSurveys();
+  }, [orgId, supabase]);
+
   const filtered = useMemo(() => {
-    return MOCK_SURVEYS.filter((s) => {
+    return surveys.filter((s) => {
       const matchesSearch =
         search === "" ||
         s.title.toLowerCase().includes(search.toLowerCase()) ||
-        s.description.toLowerCase().includes(search.toLowerCase());
+        (s.description || "").toLowerCase().includes(search.toLowerCase());
       const matchesStatus = statusFilter === "all" || s.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [search, statusFilter]);
+  }, [surveys, search, statusFilter]);
+
+  const loading = userLoading || dataLoading;
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
@@ -187,12 +186,19 @@ export default function SurveysPage() {
               ? "Try adjusting your filters"
               : "Create your first survey to get started"}
           </p>
+          {!search && statusFilter === "all" && (
+            <Link href="/surveys/new" className="mt-4">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Survey
+              </Button>
+            </Link>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((survey) => {
-            const statusConf = STATUS_CONFIG[survey.status];
-            const TypeIcon = TYPE_ICONS[survey.type];
+            const statusConf = STATUS_CONFIG[survey.status] || STATUS_CONFIG.draft;
 
             return (
               <Link key={survey.id} href={`/surveys/${survey.id}/edit`}>
@@ -201,7 +207,7 @@ export default function SurveysPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <div className="rounded-md bg-muted p-1.5">
-                          <TypeIcon className="h-4 w-4 text-muted-foreground" />
+                          <FileText className="h-4 w-4 text-muted-foreground" />
                         </div>
                         <Badge
                           variant="outline"
@@ -221,18 +227,18 @@ export default function SurveysPage() {
                       {survey.title}
                     </CardTitle>
                     <CardDescription className="line-clamp-2 text-xs">
-                      {survey.description}
+                      {survey.description || "No description"}
                     </CardDescription>
                   </CardHeader>
                   <CardFooter className="pt-0">
                     <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <BarChart3 className="h-3 w-3" />
-                        <span>{survey.responseCount} responses</span>
+                        <span>{survey.response_count} responses</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        <span>{formatDate(survey.updatedAt)}</span>
+                        <span>{formatDate(survey.updated_at)}</span>
                       </div>
                     </div>
                   </CardFooter>

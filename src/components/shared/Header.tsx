@@ -1,7 +1,8 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useUIStore } from "@/stores/ui-store";
+import { useUser } from "@/components/providers/UserProvider";
 import {
   Bell,
   ChevronRight,
@@ -24,11 +25,27 @@ function getBreadcrumbs(pathname: string) {
   }));
 }
 
+function getInitials(name: string | null | undefined, email: string | null | undefined): string {
+  if (name) {
+    return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+  }
+  if (email) {
+    return email[0].toUpperCase();
+  }
+  return "?";
+}
+
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const breadcrumbs = getBreadcrumbs(pathname);
+  const { profile, signOut, loading } = useUser();
+
+  const displayName = profile?.full_name || profile?.email?.split("@")[0] || "User";
+  const displayEmail = profile?.email || "";
+  const initials = getInitials(profile?.full_name, profile?.email);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -103,29 +120,38 @@ export function Header() {
           onClick={() => setDropdownOpen(!dropdownOpen)}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
         >
-          JD
+          {loading ? "..." : initials}
         </button>
 
         {dropdownOpen && (
           <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-border bg-popover p-1.5 shadow-xl shadow-black/10">
             <div className="border-b border-border px-3 py-2.5">
               <p className="text-sm font-medium text-popover-foreground">
-                Jane Doe
+                {displayName}
               </p>
-              <p className="text-xs text-muted-foreground">jane@example.com</p>
+              <p className="text-xs text-muted-foreground">{displayEmail}</p>
             </div>
             <div className="py-1.5">
-              <button className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-popover-foreground transition-colors hover:bg-accent">
+              <button
+                onClick={() => { setDropdownOpen(false); router.push("/settings"); }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-popover-foreground transition-colors hover:bg-accent"
+              >
                 <User className="h-4 w-4 text-muted-foreground" />
                 Profile
               </button>
-              <button className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-popover-foreground transition-colors hover:bg-accent">
+              <button
+                onClick={() => { setDropdownOpen(false); router.push("/settings"); }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-popover-foreground transition-colors hover:bg-accent"
+              >
                 <Settings className="h-4 w-4 text-muted-foreground" />
                 Settings
               </button>
             </div>
             <div className="border-t border-border pt-1.5">
-              <button className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10">
+              <button
+                onClick={() => { setDropdownOpen(false); signOut(); }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+              >
                 <LogOut className="h-4 w-4" />
                 Log out
               </button>

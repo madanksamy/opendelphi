@@ -15,6 +15,7 @@ import {
 import { EditModeProvider } from "@/components/cms/EditModeProvider";
 import { EditToolbar } from "@/components/cms/EditToolbar";
 import { EditableText } from "@/components/cms/EditableText";
+import { BackgroundPaths } from "@/components/ui/background-paths";
 
 const features = [
   {
@@ -141,51 +142,7 @@ export default function LandingPage() {
   return (
     <EditModeProvider>
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
-          <div className="absolute left-1/2 top-0 -z-10 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-        </div>
-        <div className="mx-auto max-w-7xl px-4 pb-24 pt-24 sm:px-6 sm:pt-32 lg:px-8 lg:pt-40">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-4 py-1.5 text-sm text-muted-foreground">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Now in public beta
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-              <EditableText
-                id="hero-title"
-                defaultContent="Build Smarter Surveys. Reach Consensus Faster."
-                as="span"
-                className="bg-gradient-to-r from-foreground via-foreground to-foreground bg-clip-text"
-              />
-            </h1>
-            <p className="mt-6 text-lg leading-relaxed text-muted-foreground sm:text-xl">
-              <EditableText
-                id="hero-subtitle"
-                defaultContent="OpenDelphi combines powerful survey tools with AI-driven Delphi consensus methodology. Collect feedback, analyze sentiment, and drive group decisions with confidence."
-                as="span"
-                multiline
-              />
-            </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link
-                href="/register"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
-              >
-                Get Started Free
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                href="#features"
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-6 py-3 text-base font-semibold text-foreground transition-colors hover:bg-accent"
-              >
-                See How It Works
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      <BackgroundPaths title="OpenDelphi" />
 
       {/* Social Proof */}
       <section className="border-y border-border bg-muted/30">

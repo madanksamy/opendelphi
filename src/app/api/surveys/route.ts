@@ -1,45 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MOCK_SURVEYS } from "@/lib/mock-data";
-import { createSurveySchema } from "@/lib/schema/survey";
-import type { Survey } from "@/lib/schema/survey";
+import { createClient } from "@/lib/supabase/server";
 
 // ── GET /api/surveys ────────────────────────────────────────────────
-// Query params: page, limit, status, type, search
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = request.nextUrl;
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "10", 10)));
-  const statusFilter = searchParams.get("status") as Survey["status"] | null;
-  const typeFilter = searchParams.get("type") as Survey["type"] | null;
-  const search = searchParams.get("search")?.toLowerCase();
+  const statusFilter = searchParams.get("status");
+  const typeFilter = searchParams.get("type");
+  const search = searchParams.get("search");
 
-  let filtered = [...MOCK_SURVEYS];
+  // Get user's org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("org_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single();
+
+  if (!membership) {
+    return NextResponse.json({ data: [], pagination: { page, limit, total: 0, totalPages: 0, hasNext: false, hasPrev: false } });
+  }
+
+  let query = supabase
+    .from("surveys")
+    .select("*", { count: "exact" })
+    .eq("org_id", membership.org_id)
+    .order("updated_at", { ascending: false });
 
   if (statusFilter) {
-    filtered = filtered.filter((s) => s.status === statusFilter);
+    query = query.eq("status", statusFilter);
   }
-
   if (typeFilter) {
-    filtered = filtered.filter((s) => s.type === typeFilter);
+    query = query.eq("type", typeFilter);
   }
-
   if (search) {
-    filtered = filtered.filter(
-      (s) =>
-        s.title.toLowerCase().includes(search) ||
-        s.description?.toLowerCase().includes(search) ||
-        s.slug.toLowerCase().includes(search)
-    );
+    query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
   }
 
-  const total = filtered.length;
-  const totalPages = Math.ceil(total / limit);
   const offset = (page - 1) * limit;
-  const data = filtered.slice(offset, offset + limit);
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, count, error } = await query;
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const total = count ?? 0;
+  const totalPages = Math.ceil(total / limit);
 
   return NextResponse.json({
-    data,
+    data: data ?? [],
     pagination: {
       page,
       limit,
@@ -53,30 +72,57 @@ export async function GET(request: NextRequest) {
 
 // ── POST /api/surveys ───────────────────────────────────────────────
 export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Get user's org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("org_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single();
+
+  if (!membership) {
+    return NextResponse.json({ error: "No organization found" }, { status: 400 });
+  }
+
   try {
     const body = await request.json();
-    const parsed = createSurveySchema.safeParse(body);
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Validation failed", issues: parsed.error.issues },
-        { status: 400 }
-      );
+    const slug = (body.title || "untitled")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60)
+      + "-" + Date.now().toString(36);
+
+    const { data, error } = await supabase
+      .from("surveys")
+      .insert({
+        org_id: membership.org_id,
+        created_by: user.id,
+        title: body.title,
+        description: body.description || null,
+        slug,
+        type: body.type || "standard",
+        status: body.status || "draft",
+        schema: body.schema || [],
+        settings: body.settings || {},
+        is_anonymous: body.is_anonymous ?? true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const now = new Date().toISOString();
-    const newSurvey: Survey = {
-      ...parsed.data,
-      id: crypto.randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-      publishedAt: parsed.data.status === "published" ? now : undefined,
-      version: 1,
-    };
-
-    // In a real app, this would persist to a database.
-    // For mock purposes, we return the created survey.
-    return NextResponse.json({ data: newSurvey }, { status: 201 });
+    return NextResponse.json({ data }, { status: 201 });
   } catch {
     return NextResponse.json(
       { error: "Invalid request body" },

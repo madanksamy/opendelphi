@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 import { useUIStore } from "@/stores/ui-store";
+import { useUser } from "@/components/providers/UserProvider";
 import {
   BarChart3,
   Brain,
@@ -18,55 +19,38 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    label: "Surveys",
-    href: "/surveys",
-    icon: ClipboardList,
-  },
-  {
-    label: "Delphi",
-    href: "/delphi",
-    icon: Brain,
-  },
-  {
-    label: "Templates",
-    href: "/templates",
-    icon: LayoutTemplate,
-  },
-  {
-    label: "AI Studio",
-    href: "/ai-studio",
-    icon: Sparkles,
-  },
-  {
-    label: "Analytics",
-    href: "/analytics",
-    icon: BarChart3,
-  },
-  {
-    label: "Integrations",
-    href: "/integrations",
-    icon: Plug,
-  },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Surveys", href: "/surveys", icon: ClipboardList },
+  { label: "Delphi", href: "/delphi", icon: Brain },
+  { label: "Templates", href: "/templates", icon: LayoutTemplate },
+  { label: "AI Studio", href: "/ai-studio", icon: Sparkles },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
+  { label: "Integrations", href: "/integrations", icon: Plug },
 ];
 
 const bottomItems = [
-  {
-    label: "Settings",
-    href: "/settings",
-    icon: Settings,
-  },
+  { label: "Settings", href: "/settings", icon: Settings },
 ];
+
+function getInitials(name: string | null | undefined, email: string | null | undefined): string {
+  if (name) {
+    return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+  }
+  if (email) {
+    return email[0].toUpperCase();
+  }
+  return "?";
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const { profile, loading } = useUser();
+
+  const displayName = profile?.full_name || profile?.email?.split("@")[0] || "User";
+  const displayEmail = profile?.email || "";
+  const initials = getInitials(profile?.full_name, profile?.email);
 
   return (
     <aside
@@ -78,10 +62,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
-          <Hexagon
-            className="h-7 w-7 shrink-0 text-primary"
-            strokeWidth={2.5}
-          />
+          <Hexagon className="h-7 w-7 shrink-0 text-primary" strokeWidth={2.5} />
           {sidebarOpen && (
             <span className="text-lg font-bold tracking-tight text-foreground">
               OpenDelphi
@@ -102,8 +83,7 @@ export function Sidebar() {
       {/* Main Nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
@@ -131,8 +111,7 @@ export function Sidebar() {
       {/* Bottom Nav */}
       <div className="border-t border-sidebar-border px-3 py-4">
         {bottomItems.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
@@ -164,15 +143,15 @@ export function Sidebar() {
           )}
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-            JD
+            {loading ? "..." : initials}
           </div>
           {sidebarOpen && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">
-                Jane Doe
+                {loading ? "Loading..." : displayName}
               </p>
               <p className="truncate text-xs text-muted-foreground">
-                jane@example.com
+                {loading ? "" : displayEmail}
               </p>
             </div>
           )}

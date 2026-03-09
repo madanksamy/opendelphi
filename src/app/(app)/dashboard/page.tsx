@@ -1,111 +1,153 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
   BarChart3,
   ClipboardList,
   FileDown,
   LayoutTemplate,
+  Loader2,
   Plus,
   TrendingUp,
   Users,
 } from "lucide-react";
+import { useUser } from "@/components/providers/UserProvider";
+import { createClient } from "@/lib/supabase/client";
 
-const statsCards = [
-  {
-    label: "Total Surveys",
-    value: "24",
-    change: "+3 this month",
-    trend: "up" as const,
-    icon: ClipboardList,
-  },
-  {
-    label: "Total Responses",
-    value: "4,821",
-    change: "+12% from last month",
-    trend: "up" as const,
-    icon: Users,
-  },
-  {
-    label: "Active Surveys",
-    value: "8",
-    change: "2 ending soon",
-    trend: "neutral" as const,
-    icon: BarChart3,
-  },
-  {
-    label: "Response Rate",
-    value: "68%",
-    change: "+5% from last month",
-    trend: "up" as const,
-    icon: TrendingUp,
-  },
-];
+interface SurveyRow {
+  id: string;
+  title: string;
+  status: string;
+  response_limit: number | null;
+  created_at: string;
+  response_count: number;
+}
 
-const recentSurveys = [
-  {
-    id: "1",
-    title: "Q1 Employee Satisfaction",
-    status: "Active",
-    responses: 342,
-    target: 500,
-    createdAt: "2026-02-15",
-  },
-  {
-    id: "2",
-    title: "Product Feature Prioritization",
-    status: "Active",
-    responses: 128,
-    target: 200,
-    createdAt: "2026-02-28",
-  },
-  {
-    id: "3",
-    title: "Customer Onboarding Feedback",
-    status: "Active",
-    responses: 89,
-    target: 150,
-    createdAt: "2026-03-01",
-  },
-  {
-    id: "4",
-    title: "Website Usability Study",
-    status: "Draft",
-    responses: 0,
-    target: 100,
-    createdAt: "2026-03-05",
-  },
-  {
-    id: "5",
-    title: "Annual Company Culture Survey",
-    status: "Completed",
-    responses: 450,
-    target: 450,
-    createdAt: "2026-01-10",
-  },
-];
+function getStatusLabel(status: string) {
+  switch (status) {
+    case "published": return "Active";
+    case "draft": return "Draft";
+    case "closed": return "Completed";
+    case "archived": return "Archived";
+    default: return status;
+  }
+}
 
 function getStatusColor(status: string) {
   switch (status) {
-    case "Active":
+    case "published":
       return "bg-emerald-500/10 text-emerald-600";
-    case "Draft":
+    case "draft":
       return "bg-amber-500/10 text-amber-600";
-    case "Completed":
+    case "closed":
       return "bg-blue-500/10 text-blue-600";
+    case "archived":
+      return "bg-gray-500/10 text-gray-500";
     default:
       return "bg-muted text-muted-foreground";
   }
 }
 
 export default function DashboardPage() {
+  const { profile, orgId, loading: userLoading } = useUser();
+  const [surveys, setSurveys] = useState<SurveyRow[]>([]);
+  const [totalResponses, setTotalResponses] = useState(0);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    if (!orgId) return;
+
+    async function loadDashboard() {
+      // Fetch surveys with response counts
+      const { data: surveyData } = await supabase
+        .from("surveys")
+        .select("id, title, status, response_limit, created_at")
+        .eq("org_id", orgId)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (surveyData && surveyData.length > 0) {
+        // Get response counts per survey
+        const surveyIds = surveyData.map((s: { id: string }) => s.id);
+        const { data: responseCounts } = await supabase
+          .from("responses")
+          .select("survey_id")
+          .in("survey_id", surveyIds);
+
+        const countMap: Record<string, number> = {};
+        (responseCounts || []).forEach((r: { survey_id: string }) => {
+          countMap[r.survey_id] = (countMap[r.survey_id] || 0) + 1;
+        });
+
+        const surveysWithCounts = surveyData.map((s: { id: string; title: string; status: string; response_limit: number | null; created_at: string }) => ({
+          ...s,
+          response_count: countMap[s.id] || 0,
+        }));
+
+        setSurveys(surveysWithCounts);
+
+        // Total responses across all surveys
+        const total = Object.values(countMap).reduce((sum, c) => sum + c, 0);
+        setTotalResponses(total);
+      }
+
+      setDataLoading(false);
+    }
+
+    loadDashboard();
+  }, [orgId, supabase]);
+
+  const loading = userLoading || dataLoading;
+  const displayName = profile?.full_name?.split(" ")[0] || profile?.email?.split("@")[0] || "there";
+
+  const totalSurveys = surveys.length;
+  const activeSurveys = surveys.filter((s) => s.status === "published").length;
+
+  const statsCards = [
+    {
+      label: "Total Surveys",
+      value: totalSurveys.toString(),
+      change: `${activeSurveys} active`,
+      icon: ClipboardList,
+    },
+    {
+      label: "Total Responses",
+      value: totalResponses.toLocaleString(),
+      change: "across all surveys",
+      icon: Users,
+    },
+    {
+      label: "Active Surveys",
+      value: activeSurveys.toString(),
+      change: activeSurveys > 0 ? "collecting responses" : "none active",
+      icon: BarChart3,
+    },
+    {
+      label: "Draft Surveys",
+      value: surveys.filter((s) => s.status === "draft").length.toString(),
+      change: "ready to publish",
+      icon: TrendingUp,
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       {/* Welcome */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">
-          Welcome back, Jane
+          Welcome back, {displayName}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Here&apos;s an overview of your surveys and recent activity.
@@ -173,80 +215,73 @@ export default function DashboardPage() {
             <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Title
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Responses
-                </th>
-                <th className="hidden px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground sm:table-cell">
-                  Progress
-                </th>
-                <th className="hidden px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell">
-                  Created
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {recentSurveys.map((survey) => {
-                const progress =
-                  survey.target > 0
-                    ? Math.round((survey.responses / survey.target) * 100)
-                    : 0;
-                return (
+        {surveys.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <ClipboardList className="mb-3 h-10 w-10 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">No surveys yet</p>
+            <Link
+              href="/surveys/new"
+              className="mt-3 text-sm font-medium text-primary hover:text-primary/80"
+            >
+              Create your first survey
+            </Link>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Title
+                  </th>
+                  <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Responses
+                  </th>
+                  <th className="hidden px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell">
+                    Created
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {surveys.slice(0, 5).map((survey) => (
                   <tr
                     key={survey.id}
                     className="transition-colors hover:bg-muted/50"
                   >
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-card-foreground">
+                      <Link
+                        href={`/surveys/${survey.id}/edit`}
+                        className="text-sm font-medium text-card-foreground hover:text-primary"
+                      >
                         {survey.title}
-                      </span>
+                      </Link>
                     </td>
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusColor(survey.status)}`}
                       >
-                        {survey.status}
+                        {getStatusLabel(survey.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {survey.responses.toLocaleString()} /{" "}
-                      {survey.target.toLocaleString()}
-                    </td>
-                    <td className="hidden px-6 py-4 sm:table-cell">
-                      <div className="flex items-center gap-3">
-                        <div className="h-2 w-24 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${Math.min(progress, 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {progress}%
-                        </span>
-                      </div>
+                      {survey.response_count.toLocaleString()}
                     </td>
                     <td className="hidden px-6 py-4 text-sm text-muted-foreground md:table-cell">
-                      {new Date(survey.createdAt).toLocaleDateString("en-US", {
+                      {new Date(survey.created_at).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
                         year: "numeric",
                       })}
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
