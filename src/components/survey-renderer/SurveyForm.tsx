@@ -584,17 +584,27 @@ export function SurveyForm({ survey, onSubmit, className }: SurveyFormProps) {
 
   const formValues = watch();
 
+  // Normalize schema — DB stores { fields: [...] }, but type is Field[]
+  const fields = useMemo<Field[]>(() => {
+    const s = survey.schema as unknown;
+    if (Array.isArray(s)) return s as Field[];
+    if (s && typeof s === "object" && "fields" in s && Array.isArray((s as { fields: unknown }).fields)) {
+      return (s as { fields: Field[] }).fields;
+    }
+    return [];
+  }, [survey.schema]);
+
   // Group fields by step
   const steps = useMemo(() => {
     const grouped: Field[][] = [];
-    for (const field of survey.schema) {
+    for (const field of fields) {
       const stepIdx = field.step ?? 0;
       if (!grouped[stepIdx]) grouped[stepIdx] = [];
       grouped[stepIdx].push(field);
     }
     // Remove empty slots
     return grouped.filter((s) => s && s.length > 0);
-  }, [survey.schema]);
+  }, [fields]);
 
   const totalSteps = steps.length;
   const hasWelcome = !!survey.description;
