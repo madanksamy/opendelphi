@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findSurveyById } from "@/lib/mock-data";
-import { surveySchema } from "@/lib/schema/survey";
-import type { Survey } from "@/lib/schema/survey";
+import { createClient } from "@/lib/supabase/server";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -13,16 +11,22 @@ export async function GET(
   context: RouteContext
 ) {
   const { id } = await context.params;
-  const survey = findSurveyById(id);
+  const supabase = await createClient();
 
-  if (!survey) {
+  const { data, error } = await supabase
+    .from("surveys")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) {
     return NextResponse.json(
       { error: "Survey not found" },
       { status: 404 }
     );
   }
 
-  return NextResponse.json({ data: survey });
+  return NextResponse.json({ data });
 }
 
 // ── PUT /api/surveys/[id] ───────────────────────────────────────────
@@ -31,46 +35,43 @@ export async function PUT(
   context: RouteContext
 ) {
   const { id } = await context.params;
-  const existing = findSurveyById(id);
-
-  if (!existing) {
-    return NextResponse.json(
-      { error: "Survey not found" },
-      { status: 404 }
-    );
-  }
+  const supabase = await createClient();
 
   try {
     const body = await request.json();
 
-    // Merge with existing and validate the full survey
-    const merged = {
-      ...existing,
-      ...body,
-      id: existing.id, // prevent id override
-      updatedAt: new Date().toISOString(),
-      version: existing.version + 1,
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
     };
 
-    const parsed = surveySchema.safeParse(merged);
+    if (body.title !== undefined) updates.title = body.title;
+    if (body.description !== undefined) updates.description = body.description;
+    if (body.schema !== undefined) updates.schema = body.schema;
+    if (body.settings !== undefined) updates.settings = body.settings;
+    if (body.theme !== undefined) updates.theme = body.theme;
+    if (body.status !== undefined) {
+      updates.status = body.status;
+      if (body.status === "published") {
+        updates.published_at = new Date().toISOString();
+      }
+    }
+    if (body.multi_step !== undefined) updates.multi_step = body.multi_step;
 
-    if (!parsed.success) {
+    const { data, error } = await supabase
+      .from("surveys")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error || !data) {
       return NextResponse.json(
-        { error: "Validation failed", issues: parsed.error.issues },
-        { status: 400 }
+        { error: error?.message || "Survey not found" },
+        { status: error ? 400 : 404 }
       );
     }
 
-    // Track publish timestamp
-    const updated: Survey = {
-      ...parsed.data,
-      publishedAt:
-        parsed.data.status === "published" && !existing.publishedAt
-          ? new Date().toISOString()
-          : existing.publishedAt,
-    };
-
-    return NextResponse.json({ data: updated });
+    return NextResponse.json({ data });
   } catch {
     return NextResponse.json(
       { error: "Invalid request body" },
@@ -80,29 +81,29 @@ export async function PUT(
 }
 
 // ── DELETE /api/surveys/[id] ────────────────────────────────────────
-// Soft delete — sets status to "archived"
 export async function DELETE(
   _request: NextRequest,
   context: RouteContext
 ) {
   const { id } = await context.params;
-  const existing = findSurveyById(id);
+  const supabase = await createClient();
 
-  if (!existing) {
+  const { data, error } = await supabase
+    .from("surveys")
+    .update({ status: "archived", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error || !data) {
     return NextResponse.json(
       { error: "Survey not found" },
       { status: 404 }
     );
   }
 
-  const archived: Survey = {
-    ...existing,
-    status: "archived",
-    updatedAt: new Date().toISOString(),
-  };
-
   return NextResponse.json({
-    data: archived,
+    data,
     message: "Survey archived successfully",
   });
 }

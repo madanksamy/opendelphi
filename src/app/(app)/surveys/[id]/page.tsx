@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, use } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,7 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils/cn";
 import {
   ArrowLeft,
   BarChart3,
@@ -25,105 +23,33 @@ import {
   Check,
   Share2,
   Settings,
-  Send,
   Clock,
   Users,
   CheckCircle2,
-  Gauge,
-  Activity,
-  Eye,
-  FileEdit,
-  Globe,
-  Archive,
+  Loader2,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
-// ── Mock survey data ───────────────────────────────────────────────
+interface SurveyData {
+  id: string;
+  title: string;
+  description: string;
+  slug: string;
+  type: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  version: number;
+  schema: unknown[];
+  multi_step: boolean;
+}
 
-const MOCK_SURVEY = {
-  id: "550e8400-e29b-41d4-a716-446655440000",
-  title: "Customer Satisfaction Survey",
-  description:
-    "Collect feedback from customers about their experience with our product and services.",
-  slug: "customer-satisfaction",
-  type: "survey" as const,
-  status: "published" as const,
-  createdAt: "2025-12-15T10:00:00Z",
-  updatedAt: "2026-02-28T14:30:00Z",
-  publishedAt: "2026-01-05T09:00:00Z",
-  version: 3,
-  fieldCount: 11,
-  stepCount: 4,
-};
-
-const MOCK_STATS = {
-  totalResponses: 1247,
-  completionRate: 84.2,
-  avgDuration: "4m 32s",
-  npsScore: 62,
-  todayResponses: 23,
-  weekResponses: 156,
-};
-
-const MOCK_ACTIVITY = [
-  {
-    id: 1,
-    action: "Response received",
-    detail: "from emma.smith@example.com",
-    time: "2 minutes ago",
-    icon: ClipboardList,
-  },
-  {
-    id: 2,
-    action: "Response received",
-    detail: "from liam.johnson@example.com",
-    time: "15 minutes ago",
-    icon: ClipboardList,
-  },
-  {
-    id: 3,
-    action: "Survey edited",
-    detail: "Updated question 5 wording",
-    time: "2 hours ago",
-    icon: FileEdit,
-  },
-  {
-    id: 4,
-    action: "Response received",
-    detail: "from olivia.williams@example.com",
-    time: "3 hours ago",
-    icon: ClipboardList,
-  },
-  {
-    id: 5,
-    action: "Email blast sent",
-    detail: "Sent to 350 recipients",
-    time: "1 day ago",
-    icon: Send,
-  },
-  {
-    id: 6,
-    action: "Survey published",
-    detail: "Version 3 went live",
-    time: "1 week ago",
-    icon: Globe,
-  },
-  {
-    id: 7,
-    action: "Response milestone",
-    detail: "Reached 1,000 responses",
-    time: "2 weeks ago",
-    icon: Activity,
-  },
-  {
-    id: 8,
-    action: "Survey edited",
-    detail: "Added NPS question",
-    time: "3 weeks ago",
-    icon: FileEdit,
-  },
-];
-
-// ── Helpers ────────────────────────────────────────────────────────
+interface Stats {
+  totalResponses: number;
+  completedCount: number;
+  completionRate: number;
+}
 
 const STATUS_STYLES: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
   draft: { variant: "secondary", label: "Draft" },
@@ -132,14 +58,54 @@ const STATUS_STYLES: Record<string, { variant: "default" | "secondary" | "destru
   archived: { variant: "outline", label: "Archived" },
 };
 
-// ── Page ───────────────────────────────────────────────────────────
-
-export default function SurveyOverviewPage() {
-  const params = useParams();
-  const surveyId = params.id as string;
+export default function SurveyOverviewPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id: surveyId } = use(params);
+  const [survey, setSurvey] = useState<SurveyData | null>(null);
+  const [stats, setStats] = useState<Stats>({ totalResponses: 0, completedCount: 0, completionRate: 0 });
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/s/${MOCK_SURVEY.slug}`;
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function load() {
+      const { data: surveyRow } = await supabase
+        .from("surveys")
+        .select("id, title, description, slug, type, status, created_at, updated_at, published_at, version, schema, multi_step")
+        .eq("id", surveyId)
+        .single();
+
+      if (surveyRow) {
+        setSurvey(surveyRow);
+
+        // Get response counts
+        const { data: responses } = await supabase
+          .from("responses")
+          .select("status")
+          .eq("survey_id", surveyId);
+
+        const total = responses?.length || 0;
+        const completed = responses?.filter((r: { status: string }) => r.status === "complete").length || 0;
+
+        setStats({
+          totalResponses: total,
+          completedCount: completed,
+          completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+        });
+      }
+
+      setLoading(false);
+    }
+    load();
+  }, [surveyId, supabase]);
+
+  const shareUrl = survey
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/s/${survey.slug}`
+    : "";
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(shareUrl);
@@ -147,7 +113,30 @@ export default function SurveyOverviewPage() {
     setTimeout(() => setCopied(false), 2000);
   }, [shareUrl]);
 
-  const statusConfig = STATUS_STYLES[MOCK_SURVEY.status] ?? STATUS_STYLES.draft;
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!survey) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground">Survey not found</p>
+        <Link href="/surveys">
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Surveys
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const statusConfig = STATUS_STYLES[survey.status] ?? STATUS_STYLES.draft;
+  const fieldCount = Array.isArray(survey.schema) ? survey.schema.length : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -165,22 +154,23 @@ export default function SurveyOverviewPage() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-3xl font-bold tracking-tight">
-                  {MOCK_SURVEY.title}
+                  {survey.title}
                 </h1>
                 <Badge variant={statusConfig.variant}>
                   {statusConfig.label}
                 </Badge>
               </div>
-              <p className="text-muted-foreground max-w-2xl">
-                {MOCK_SURVEY.description}
-              </p>
+              {survey.description && (
+                <p className="text-muted-foreground max-w-2xl">
+                  {survey.description}
+                </p>
+              )}
               <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                <span>{MOCK_SURVEY.fieldCount} questions</span>
-                <span>{MOCK_SURVEY.stepCount} steps</span>
-                <span>v{MOCK_SURVEY.version}</span>
+                <span>{fieldCount} questions</span>
+                <span>v{survey.version}</span>
                 <span>
                   Created{" "}
-                  {new Date(MOCK_SURVEY.createdAt).toLocaleDateString()}
+                  {new Date(survey.created_at).toLocaleDateString()}
                 </span>
               </div>
             </div>
@@ -191,46 +181,33 @@ export default function SurveyOverviewPage() {
                   Analytics
                 </Button>
               </Link>
-              <Button size="sm">
-                <Edit3 className="h-4 w-4 mr-1" />
-                Edit Survey
-              </Button>
+              <Link href={`/surveys/${surveyId}/edit`}>
+                <Button size="sm">
+                  <Edit3 className="h-4 w-4 mr-1" />
+                  Edit Survey
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-8 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 mb-8 sm:grid-cols-3">
           {[
             {
               label: "Total Responses",
-              value: MOCK_STATS.totalResponses.toLocaleString(),
+              value: stats.totalResponses.toLocaleString(),
               icon: Users,
             },
             {
-              label: "Completion Rate",
-              value: `${MOCK_STATS.completionRate}%`,
+              label: "Completed",
+              value: stats.completedCount.toLocaleString(),
               icon: CheckCircle2,
             },
             {
-              label: "Avg Duration",
-              value: MOCK_STATS.avgDuration,
+              label: "Completion Rate",
+              value: `${stats.completionRate}%`,
               icon: Clock,
-            },
-            {
-              label: "NPS Score",
-              value: String(MOCK_STATS.npsScore),
-              icon: Gauge,
-            },
-            {
-              label: "Today",
-              value: String(MOCK_STATS.todayResponses),
-              icon: Activity,
-            },
-            {
-              label: "This Week",
-              value: String(MOCK_STATS.weekResponses),
-              icon: Activity,
             },
           ].map((stat) => {
             const Icon = stat.icon;
@@ -265,7 +242,7 @@ export default function SurveyOverviewPage() {
                       href: `/surveys/${surveyId}/analytics`,
                       icon: BarChart3,
                       label: "Analytics",
-                      description: "Charts, trends, and AI insights",
+                      description: "Charts, trends, and insights",
                     },
                     {
                       href: `/surveys/${surveyId}/responses`,
@@ -280,10 +257,10 @@ export default function SurveyOverviewPage() {
                       description: "Email, SMS, links, and embed",
                     },
                     {
-                      href: "#",
+                      href: `/surveys/${surveyId}/edit`,
                       icon: Settings,
-                      label: "Settings",
-                      description: "Survey configuration and access",
+                      label: "Edit",
+                      description: "Survey builder and configuration",
                     },
                   ].map((link) => {
                     const Icon = link.icon;
@@ -310,83 +287,101 @@ export default function SurveyOverviewPage() {
             </Card>
 
             {/* Share Link */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Share Link</CardTitle>
-                <CardDescription>
-                  Send this link to respondents to collect responses
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={shareUrl}
-                      readOnly
-                      className="pl-9 pr-4 bg-muted/50 font-mono text-sm"
-                    />
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={handleCopy}
-                    className="min-w-[100px]"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="h-4 w-4 mr-1" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 mr-1" />
-                        Copy
-                      </>
-                    )}
-                  </Button>
-                  <Link href={shareUrl} target="_blank">
-                    <Button variant="outline" size="icon">
-                      <ExternalLink className="h-4 w-4" />
+            {survey.status === "published" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Share Link</CardTitle>
+                  <CardDescription>
+                    Send this link to respondents to collect responses
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={shareUrl}
+                        readOnly
+                        className="pl-9 pr-4 bg-muted/50 font-mono text-sm"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleCopy}
+                      className="min-w-[100px]"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-4 w-4 mr-1" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy
+                        </>
+                      )}
                     </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+                    <Link href={shareUrl} target="_blank">
+                      <Button variant="outline" size="icon">
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
-          {/* Right column - Activity Timeline */}
+          {/* Right column - Info */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Recent Activity</CardTitle>
+              <CardTitle className="text-base">Survey Details</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-0">
-                {MOCK_ACTIVITY.map((item, idx) => {
-                  const Icon = item.icon;
-                  return (
-                    <div key={item.id} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className="rounded-full border bg-background p-1.5">
-                          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
-                        {idx < MOCK_ACTIVITY.length - 1 && (
-                          <div className="w-px flex-1 bg-border my-1" />
-                        )}
-                      </div>
-                      <div className="pb-4">
-                        <p className="text-sm font-medium leading-tight">
-                          {item.action}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.detail}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {item.time}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Type</span>
+                  <span className="font-medium capitalize">{survey.type}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <Badge variant={statusConfig.variant} className="text-xs">
+                    {statusConfig.label}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Questions</span>
+                  <span className="font-medium">{fieldCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Version</span>
+                  <span className="font-medium">v{survey.version}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Multi-step</span>
+                  <span className="font-medium">{survey.multi_step ? "Yes" : "No"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Created</span>
+                  <span className="font-medium">
+                    {new Date(survey.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Updated</span>
+                  <span className="font-medium">
+                    {new Date(survey.updated_at).toLocaleDateString()}
+                  </span>
+                </div>
+                {survey.published_at && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Published</span>
+                    <span className="font-medium">
+                      {new Date(survey.published_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

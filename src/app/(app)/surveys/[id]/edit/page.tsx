@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,50 +8,58 @@ import { cn } from "@/lib/utils/cn";
 import { useBuilderStore } from "@/stores/builder-store";
 import { Builder } from "@/components/form-builder/Builder";
 import type { Survey } from "@/lib/schema/survey";
-import { v4 as uuidv4 } from "uuid";
+import { createClient } from "@/lib/supabase/client";
 
-// Mock survey loader - in production, this would fetch from API
+// Map DB row (snake_case) to Survey type (camelCase)
+function dbToSurvey(row: Record<string, unknown>): Survey {
+  return {
+    id: row.id as string,
+    orgId: row.org_id as string,
+    title: row.title as string,
+    description: (row.description as string) || "",
+    slug: row.slug as string,
+    type: (row.type as Survey["type"]) || "survey",
+    status: (row.status as Survey["status"]) || "draft",
+    schema: (row.schema as Survey["schema"]) || [],
+    settings: (row.settings as Survey["settings"]) || undefined,
+    theme: (row.theme as Survey["theme"]) || undefined,
+    multiStep: (row.multi_step as boolean) || false,
+    stepLabels: (row.step_labels as string[]) || [],
+    version: (row.version as number) || 1,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    publishedAt: row.published_at as string | undefined,
+    createdBy: row.created_by as string | undefined,
+  };
+}
+
 function useSurvey(id: string) {
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const supabase = createClient();
 
   useEffect(() => {
-    // Simulate API call
-    const timer = setTimeout(() => {
-      setSurvey({
-        id,
-        orgId: uuidv4(),
-        title: "Untitled Survey",
-        description: "",
-        slug: `survey-${id.slice(0, 8)}`,
-        type: "survey",
-        status: "draft",
-        schema: [],
-        settings: {
-          allowAnonymous: true,
-          requireAuth: false,
-          showProgressBar: true,
-          showQuestionNumbers: true,
-          shuffleQuestions: false,
-          notifyOnResponse: false,
-        },
-        theme: {
-          primaryColor: "#6366f1",
-          backgroundColor: "#ffffff",
-          fontFamily: "Inter",
-          borderRadius: 8,
-        },
-        multiStep: false,
-        stepLabels: [],
-        version: 1,
-      });
+    async function load() {
+      const { data, error } = await supabase
+        .from("surveys")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error || !data) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
+      setSurvey(dbToSurvey(data));
       setLoading(false);
-    }, 200);
+    }
+    load();
+  }, [id, supabase]);
 
-    return () => clearTimeout(timer);
-  }, [id]);
-
-  return { survey, loading, setSurvey };
+  return { survey, loading, notFound, setSurvey };
 }
 
 export default function EditSurveyPage({
@@ -60,11 +68,12 @@ export default function EditSurveyPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { survey, loading, setSurvey } = useSurvey(id);
+  const { survey, loading, notFound, setSurvey } = useSurvey(id);
   const { loadSurvey, isDirty, saveSurvey } = useBuilderStore();
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [multiStep, setMultiStep] = useState(false);
   const [stepLabels, setStepLabels] = useState<string[]>([]);
+  const supabase = createClient();
 
   // Load survey into builder store
   useEffect(() => {
@@ -86,21 +95,46 @@ export default function EditSurveyPage({
     return () => clearTimeout(timer);
   }, [isDirty]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     setSaveState("saving");
     const data = saveSurvey();
 
-    // Simulate API save
-    setTimeout(() => {
+    const { error } = await supabase
+      .from("surveys")
+      .update({
+        schema: data.fields,
+        title: data.meta?.title || survey?.title,
+        description: data.meta?.description || survey?.description,
+        settings: data.meta?.settings || survey?.settings,
+        theme: data.meta?.theme || survey?.theme,
+        multi_step: multiStep,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Save failed:", error.message);
+      setSaveState("idle");
+    } else {
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 2000);
-    }, 500);
-  }, [saveSurvey]);
+    }
+  }, [saveSurvey, supabase, id, survey, multiStep]);
 
-  const handlePublish = useCallback(() => {
-    handleSave();
-    // In production: update status to published via API
-  }, [handleSave]);
+  const handlePublish = useCallback(async () => {
+    await handleSave();
+    const { error } = await supabase
+      .from("surveys")
+      .update({
+        status: "published",
+        published_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (!error && survey) {
+      setSurvey({ ...survey, status: "published" });
+    }
+  }, [handleSave, supabase, id, survey, setSurvey]);
 
   const handleUpdateMeta = useCallback(
     (meta: { multiStep?: boolean; stepLabels?: string[] }) => {
@@ -118,7 +152,7 @@ export default function EditSurveyPage({
     );
   }
 
-  if (!survey) {
+  if (notFound || !survey) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">Survey not found</p>

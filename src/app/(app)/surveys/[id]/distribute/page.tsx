@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,14 +29,28 @@ import {
   Send,
   Plus,
   X,
-  Users,
 } from "lucide-react";
 
 export default function DistributePage() {
   const params = useParams();
   const surveyId = params.id as string;
+  const [slug, setSlug] = useState<string | null>(null);
+  const supabase = createClient();
 
-  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/s/customer-satisfaction`;
+  useEffect(() => {
+    supabase
+      .from("surveys")
+      .select("slug")
+      .eq("id", surveyId)
+      .single()
+      .then(({ data }: { data: { slug: string } | null }) => {
+        if (data) setSlug(data.slug);
+      });
+  }, [surveyId, supabase]);
+
+  const shareUrl = slug
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/s/${slug}`
+    : "";
 
   return (
     <div className="min-h-screen bg-background">
