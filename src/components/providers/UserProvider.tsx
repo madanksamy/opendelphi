@@ -24,6 +24,10 @@ interface UserContextValue {
   profile: Profile | null;
   org: Organization | null;
   orgId: string | null;
+  plan: string;
+  authProvider: string | null;
+  isGoogleUser: boolean;
+  isPaidUser: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -33,6 +37,10 @@ const UserContext = createContext<UserContextValue>({
   profile: null,
   org: null,
   orgId: null,
+  plan: "free",
+  authProvider: null,
+  isGoogleUser: false,
+  isPaidUser: false,
   loading: true,
   signOut: async () => {},
 });
@@ -128,7 +136,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <UserContext.Provider
-      value={{ user, profile, org, orgId: org?.id ?? null, loading, signOut }}
+      value={{
+        user,
+        profile,
+        org,
+        orgId: org?.id ?? null,
+        plan: org?.plan ?? "free",
+        authProvider: user?.app_metadata?.provider ?? null,
+        isGoogleUser: user?.app_metadata?.provider === "google",
+        isPaidUser: ["pro", "business", "enterprise"].includes(org?.plan ?? ""),
+        loading,
+        signOut,
+      }}
     >
       {children}
     </UserContext.Provider>

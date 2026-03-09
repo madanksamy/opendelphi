@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Building2,
   Globe,
@@ -68,7 +68,7 @@ const defaultNotifications: NotificationPreferences = {
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
 export default function SettingsPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const { user, profile, org, orgId } = useUser();
 
   const [loading, setLoading] = useState(true);
@@ -94,6 +94,16 @@ export default function SettingsPage() {
 
   const loadData = useCallback(async () => {
     if (!orgId || !user) {
+      // Still populate from UserProvider data if available
+      if (profile) {
+        setFullName(profile.full_name ?? "");
+        setEmail(profile.email ?? "");
+        setPhone(profile.phone ?? "");
+      }
+      if (org) {
+        setOrgName(org.name ?? "");
+        setOrgSlug(org.slug ?? "");
+      }
       setLoading(false);
       return;
     }
@@ -101,13 +111,19 @@ export default function SettingsPage() {
     setLoading(true);
     try {
       // Load organization details (including settings JSONB)
-      const { data: orgData } = await supabase
+      const { data: orgData, error: orgErr } = await supabase
         .from("organizations")
         .select("name, slug, settings")
         .eq("id", orgId)
         .single();
 
-      if (orgData) {
+      if (orgErr) {
+        // Fallback to UserProvider data
+        if (org) {
+          setOrgName(org.name ?? "");
+          setOrgSlug(org.slug ?? "");
+        }
+      } else if (orgData) {
         setOrgName(orgData.name ?? "");
         setOrgSlug(orgData.slug ?? "");
         const settings = (orgData.settings ?? {}) as OrgSettings;
@@ -119,13 +135,20 @@ export default function SettingsPage() {
       }
 
       // Load profile
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profErr } = await supabase
         .from("profiles")
         .select("full_name, email, phone")
         .eq("id", user.id)
         .single();
 
-      if (profileData) {
+      if (profErr) {
+        // Fallback to UserProvider data
+        if (profile) {
+          setFullName(profile.full_name ?? "");
+          setEmail(profile.email ?? "");
+          setPhone(profile.phone ?? "");
+        }
+      } else if (profileData) {
         setFullName(profileData.full_name ?? "");
         setEmail(profileData.email ?? "");
         setPhone(profileData.phone ?? "");
@@ -133,7 +156,7 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [orgId, user, supabase]);
+  }, [orgId, user, profile, org, supabase]);
 
   useEffect(() => {
     loadData();
@@ -144,25 +167,29 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
-    if (!orgId || !user) return;
+    if (!user) return;
 
     setSaveStatus("saving");
     setSaveError(null);
 
+    const errors: string[] = [];
+
     try {
-      const settings: OrgSettings = {
-        default_language: language,
-        timezone,
-        notifications,
-      };
+      // Update organization (if we have orgId)
+      if (orgId) {
+        const settings: OrgSettings = {
+          default_language: language,
+          timezone,
+          notifications,
+        };
 
-      // Update organization
-      const { error: orgError } = await supabase
-        .from("organizations")
-        .update({ name: orgName, slug: orgSlug, settings })
-        .eq("id", orgId);
+        const { error: orgError } = await supabase
+          .from("organizations")
+          .update({ name: orgName, slug: orgSlug, settings })
+          .eq("id", orgId);
 
-      if (orgError) throw orgError;
+        if (orgError) errors.push(`Organization: ${orgError.message}`);
+      }
 
       // Update profile
       const { error: profileError } = await supabase
@@ -170,10 +197,16 @@ export default function SettingsPage() {
         .update({ full_name: fullName, phone })
         .eq("id", user.id);
 
-      if (profileError) throw profileError;
+      if (profileError) errors.push(`Profile: ${profileError.message}`);
 
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 3000);
+      if (errors.length > 0) {
+        setSaveError(errors.join("; "));
+        setSaveStatus("error");
+        setTimeout(() => setSaveStatus("idle"), 5000);
+      } else {
+        setSaveStatus("success");
+        setTimeout(() => setSaveStatus("idle"), 3000);
+      }
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Failed to save settings";

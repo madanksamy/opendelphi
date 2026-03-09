@@ -255,10 +255,12 @@ export default function DelphiPage() {
             className="text-sm text-muted-foreground"
           />
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Delphi Study
-        </Button>
+        <Link href="/delphi/new">
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            New Delphi Study
+          </Button>
+        </Link>
       </div>
 
       {/* Filters */}

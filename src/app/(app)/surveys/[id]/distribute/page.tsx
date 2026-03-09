@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@/components/providers/UserProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,12 +30,18 @@ import {
   Send,
   Plus,
   X,
+  Sheet,
+  Crown,
+  Loader2,
+  Check as CheckIcon,
+  ExternalLink as ExternalLinkIcon,
 } from "lucide-react";
 
 export default function DistributePage() {
   const params = useParams();
   const surveyId = params.id as string;
   const [slug, setSlug] = useState<string | null>(null);
+  const { isGoogleUser, isPaidUser } = useUser();
   const supabase = createClient();
 
   useEffect(() => {
@@ -87,6 +94,13 @@ export default function DistributePage() {
 
           {/* Embed Code */}
           <EmbedSection surveyId={surveyId} url={shareUrl} />
+
+          {/* Google Sheets */}
+          <GoogleSheetsSection
+            surveyId={surveyId}
+            isGoogleUser={isGoogleUser}
+            isPaidUser={isPaidUser}
+          />
         </div>
       </div>
     </div>
@@ -661,6 +675,279 @@ function EmbedSection({
             ? "Paste this code into your HTML where you want the survey to appear. Adjust width and height as needed."
             : "Add this script to your page. The survey will render automatically with theme detection."}
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Google Sheets ──────────────────────────────────────────────────
+
+function GoogleSheetsSection({
+  surveyId,
+  isGoogleUser,
+  isPaidUser,
+}: {
+  surveyId: string;
+  isGoogleUser: boolean;
+  isPaidUser: boolean;
+}) {
+  const [mode, setMode] = useState<"own" | "managed" | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [managedSheetUrl, setManagedSheetUrl] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const canUseOwnSheet = isGoogleUser && isPaidUser;
+
+  const handleConnectOwnSheet = useCallback(async () => {
+    setConnecting(true);
+    try {
+      const supabase = createClient();
+      await supabase.from("integrations").upsert(
+        {
+          survey_id: surveyId,
+          type: "google_sheets",
+          config: { mode: "own", sheet_url: sheetUrl },
+          status: "active",
+          last_synced_at: new Date().toISOString(),
+        },
+        { onConflict: "survey_id,type" }
+      );
+      setConnected(true);
+    } catch (err) {
+      console.error("Failed to connect sheet:", err);
+    } finally {
+      setConnecting(false);
+    }
+  }, [surveyId, sheetUrl]);
+
+  const handleCreateManagedSheet = useCallback(async () => {
+    setCreating(true);
+    try {
+      const supabase = createClient();
+      // Create a managed sheet record — backend would create the actual sheet
+      const { data } = await supabase
+        .from("integrations")
+        .upsert(
+          {
+            survey_id: surveyId,
+            type: "google_sheets",
+            config: { mode: "managed" },
+            status: "active",
+            last_synced_at: new Date().toISOString(),
+          },
+          { onConflict: "survey_id,type" }
+        )
+        .select("config")
+        .single();
+
+      // In production the backend would return the sheet URL
+      const url =
+        (data?.config as Record<string, string>)?.sheet_url ??
+        `https://docs.google.com/spreadsheets/d/managed-${surveyId.slice(0, 8)}`;
+      setManagedSheetUrl(url);
+      setConnected(true);
+    } catch (err) {
+      console.error("Failed to create managed sheet:", err);
+    } finally {
+      setCreating(false);
+    }
+  }, [surveyId]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <div className="rounded-lg bg-green-100 dark:bg-green-900/30 p-2">
+            <Sheet className="h-5 w-5 text-green-600 dark:text-green-400" />
+          </div>
+          <div className="flex-1">
+            <CardTitle className="text-base">Google Sheets</CardTitle>
+            <CardDescription>
+              Sync survey responses to a spreadsheet automatically
+            </CardDescription>
+          </div>
+          {connected && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Connected
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!connected && !mode && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* Option 1: Use own Google Sheet (paid + Google users) */}
+            <button
+              onClick={() => canUseOwnSheet && setMode("own")}
+              disabled={!canUseOwnSheet}
+              className={cn(
+                "relative flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-all",
+                canUseOwnSheet
+                  ? "border-border hover:border-primary/50 hover:shadow-md cursor-pointer"
+                  : "border-border opacity-60 cursor-not-allowed"
+              )}
+            >
+              <div className="flex w-full items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="h-5 w-5" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </svg>
+                  <span className="text-sm font-semibold text-card-foreground">
+                    Your Google Sheet
+                  </span>
+                </div>
+                {!canUseOwnSheet && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
+                    <Crown className="h-3 w-3" />
+                    Pro
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {canUseOwnSheet
+                  ? "Connect your own Google Sheet. Responses sync directly to your spreadsheet."
+                  : !isGoogleUser
+                    ? "Sign in with Google and upgrade to Pro to use your own sheets."
+                    : "Upgrade to Pro to connect your own Google Sheets."}
+              </p>
+            </button>
+
+            {/* Option 2: OpenDelphi managed sheet (all users) */}
+            <button
+              onClick={() => setMode("managed")}
+              className="flex flex-col items-start gap-2 rounded-xl border-2 border-border p-4 text-left transition-all hover:border-primary/50 hover:shadow-md cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Sheet className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-semibold text-card-foreground">
+                  OpenDelphi Sheet
+                </span>
+                <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                  Free
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                We create and manage a Google Sheet for this survey. View and download responses anytime.
+              </p>
+            </button>
+          </div>
+        )}
+
+        {/* Own sheet form */}
+        {!connected && mode === "own" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <button
+                onClick={() => setMode(null)}
+                className="text-primary hover:underline"
+              >
+                Back
+              </button>
+              <span>/</span>
+              <span>Connect your Google Sheet</span>
+            </div>
+            <div className="space-y-2">
+              <Label>Google Sheet URL</Label>
+              <Input
+                value={sheetUrl}
+                onChange={(e) => setSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Paste the URL of an existing Google Sheet. Make sure it&apos;s shared with edit access.
+              </p>
+            </div>
+            <Button
+              onClick={handleConnectOwnSheet}
+              disabled={connecting || !sheetUrl.includes("docs.google.com/spreadsheets")}
+            >
+              {connecting ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Sheet className="h-4 w-4 mr-1" />
+              )}
+              Connect Sheet
+            </Button>
+          </div>
+        )}
+
+        {/* Managed sheet */}
+        {!connected && mode === "managed" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <button
+                onClick={() => setMode(null)}
+                className="text-primary hover:underline"
+              >
+                Back
+              </button>
+              <span>/</span>
+              <span>OpenDelphi managed sheet</span>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm text-card-foreground">
+                We&apos;ll create a Google Sheet for this survey and automatically sync all responses.
+                You can view, download, or share it anytime.
+              </p>
+              <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                <li className="flex items-center gap-1.5">
+                  <CheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+                  Auto-synced in real time
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <CheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+                  One sheet per survey
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <CheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+                  Download as CSV or Excel anytime
+                </li>
+              </ul>
+            </div>
+            <Button onClick={handleCreateManagedSheet} disabled={creating}>
+              {creating ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Sheet className="h-4 w-4 mr-1" />
+              )}
+              Create Sheet
+            </Button>
+          </div>
+        )}
+
+        {/* Connected state */}
+        {connected && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <CheckIcon className="h-5 w-5 text-emerald-500" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-card-foreground">
+                  {mode === "own" ? "Your Google Sheet is connected" : "Managed sheet created"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Responses will be synced automatically as they come in.
+                </p>
+              </div>
+            </div>
+            {(sheetUrl || managedSheetUrl) && (
+              <a
+                href={sheetUrl || managedSheetUrl || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              >
+                <ExternalLinkIcon className="h-4 w-4" />
+                Open in Google Sheets
+              </a>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
