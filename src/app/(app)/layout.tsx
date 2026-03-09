@@ -3,6 +3,7 @@ import { Header } from "@/components/shared/Header";
 import { EditModeProvider } from "@/components/cms/EditModeProvider";
 import { EditToolbar } from "@/components/cms/EditToolbar";
 import { UserProvider } from "@/components/providers/UserProvider";
+import { LanguageProvider } from "@/components/providers/LanguageProvider";
 
 export default function AppLayout({
   children,
@@ -11,6 +12,7 @@ export default function AppLayout({
 }) {
   return (
     <UserProvider>
+      <LanguageProvider>
       <EditModeProvider>
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
@@ -23,6 +25,7 @@ export default function AppLayout({
         </div>
         <EditToolbar />
       </EditModeProvider>
+      </LanguageProvider>
     </UserProvider>
   );
 }

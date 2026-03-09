@@ -75,170 +75,14 @@ const chatSuggestions = [
   "Suggest follow-up questions for low satisfaction",
 ];
 
-// ── AI Chat responses (local, no API key needed) ──────────────────────
+// ── AI models available ───────────────────────────────────────────────
 
-function getAIResponse(message: string): string {
-  const lower = message.toLowerCase();
-
-  if (lower.includes("response rate") || lower.includes("more responses")) {
-    return `Here are proven strategies to improve survey response rates:
-
-**1. Keep it short** — Aim for 5-10 questions. Each additional question drops completion by ~5%.
-
-**2. Optimize timing** — Send surveys within 24 hours of the experience. Tuesdays and Thursdays at 10am get the best open rates.
-
-**3. Personalize the invitation** — Use the respondent's name and reference their specific interaction.
-
-**4. Mobile-first design** — 60%+ of responses come from mobile. Ensure your survey renders well on small screens.
-
-**5. Set expectations** — Tell people how long it takes ("This 2-minute survey...").
-
-**6. Follow up** — Send one reminder 2-3 days after the initial invite. Don't send more than two.
-
-**7. Incentivize wisely** — Small incentives (gift cards, discounts) can boost rates 10-15% without biasing results.
-
-Would you like me to help you optimize a specific survey?`;
-  }
-
-  if (lower.includes("rating") || lower.includes("scale")) {
-    return `Great question! Here are best practices for rating questions:
-
-**Use odd-numbered scales** (5 or 7 point) to allow a neutral middle option.
-
-**Label all points**, not just endpoints. "1 = Very Dissatisfied, 2 = Dissatisfied, 3 = Neutral, 4 = Satisfied, 5 = Very Satisfied"
-
-**Be consistent** — Use the same scale direction throughout. Don't mix "1=best" and "1=worst".
-
-**Avoid double-barreled questions** — "How satisfied are you with speed and quality?" should be two separate questions.
-
-**Consider NPS for loyalty** — The 0-10 "would you recommend" scale is standardized and benchmarkable.
-
-**For frequency**, use specific anchors: "Never, Rarely, Sometimes, Often, Always" instead of numeric scales.
-
-Want me to generate some sample rating questions for your survey topic?`;
-  }
-
-  if (lower.includes("nps") || lower.includes("net promoter")) {
-    return `**NPS (Net Promoter Score) Analysis Guide:**
-
-**Scoring:**
-- **Promoters (9-10):** Loyal enthusiasts who will fuel growth
-- **Passives (7-8):** Satisfied but unenthusiastic, vulnerable to competitors
-- **Detractors (0-6):** Unhappy customers who can damage your brand
-
-**NPS = % Promoters - % Detractors** (ranges from -100 to +100)
-
-**Benchmarks by industry:**
-- SaaS: 30-40 is good, 50+ is excellent
-- Healthcare: 38 average, 60+ is top tier
-- Education: 50+ is good
-
-**Key follow-up questions to add:**
-1. "What is the primary reason for your score?" (open text)
-2. "What could we do to improve?" (for detractors)
-3. "What do you value most?" (for promoters)
-
-**Pro tip:** Track NPS over time rather than obsessing over a single score. Trend matters more than absolute number.
-
-Should I help you set up an NPS survey with proper follow-up logic?`;
-  }
-
-  if (lower.includes("follow-up") || lower.includes("low satisfaction") || lower.includes("negative")) {
-    return `For low satisfaction or negative feedback, here are effective follow-up strategies:
-
-**Immediate follow-up questions (in-survey):**
-1. "We're sorry to hear that. What specifically disappointed you?" (open text)
-2. "Which area needs the most improvement?" (multi-select: Quality, Communication, Speed, Price, Support)
-3. "Would you like someone to reach out to discuss your experience?" (yes/no)
-
-**Post-survey actions:**
-- **Auto-alert** your team when scores drop below threshold
-- **Segment responses** by score range for targeted outreach
-- **Close the loop** — contact detractors within 48 hours
-
-**Question phrasing tips for sensitive topics:**
-- Start with "Help us understand..." instead of "Why were you..."
-- Use "What could we improve?" rather than "What went wrong?"
-- Always offer a "Prefer not to answer" option
-
-Want me to generate a recovery survey template for dissatisfied customers?`;
-  }
-
-  if (lower.includes("generate") || lower.includes("create") || lower.includes("build") || lower.includes("make")) {
-    return `I'd love to help you create a survey! Here's what I need:
-
-1. **Topic/Purpose** — What are you trying to learn? (e.g., customer satisfaction, employee feedback, event evaluation)
-2. **Audience** — Who will take this survey? (e.g., patients, employees, students, customers)
-3. **Length** — How many questions? (I recommend 5-10 for best completion rates)
-4. **Key metrics** — What specific things do you want to measure?
-
-**Quick start:** Head to the **"Generate with AI"** tab and describe your survey in one sentence. I'll create a complete questionnaire with the right mix of question types.
-
-Or tell me more details here and I'll suggest the perfect structure!`;
-  }
-
-  if (lower.includes("question type") || lower.includes("what type")) {
-    return `Here's a guide to choosing the right question types:
-
-| Type | Best For | Example |
-|------|----------|---------|
-| **Rating (1-5 stars)** | Quick satisfaction | "Rate your experience" |
-| **NPS (0-10)** | Loyalty measurement | "How likely to recommend?" |
-| **Scale (Likert)** | Agreement/frequency | "I feel valued at work" |
-| **Multiple choice** | Categorization | "How did you find us?" |
-| **Multi-select** | Multiple answers | "Which features do you use?" |
-| **Open text** | Qualitative insights | "What could we improve?" |
-| **Ranking** | Prioritization | "Rank features by importance" |
-| **Matrix** | Multi-item evaluation | "Rate each department" |
-
-**Rule of thumb:** Start with quantitative (rating/scale), end with qualitative (open text). Mix 70% closed / 30% open questions.
-
-Need help choosing question types for your specific survey?`;
-  }
-
-  if (lower.includes("best practice") || lower.includes("tip") || lower.includes("advice")) {
-    return `**Survey Design Best Practices:**
-
-**Structure:**
-- Start with easy, engaging questions
-- Group related questions together
-- Put sensitive/demographic questions at the end
-- End with an open-ended "anything else?" question
-
-**Writing:**
-- Use simple, clear language (8th grade reading level)
-- One concept per question — no double-barreled questions
-- Avoid leading or loaded questions
-- Provide balanced response options
-
-**Design:**
-- Show a progress bar for surveys > 5 questions
-- Use conditional logic to skip irrelevant questions
-- Test on mobile before sending
-- Include a clear "Thank you" page with next steps
-
-**Distribution:**
-- Personalize the invitation email
-- Send at optimal times (Tue-Thu, 10am)
-- Keep reminder emails brief and friendly
-- Set a clear deadline
-
-Would you like me to review a specific survey you're working on?`;
-  }
-
-  // Default response
-  return `That's a great question! Here are some thoughts:
-
-I can help you with:
-- **Survey design** — Question types, structure, and best practices
-- **Analysis guidance** — How to interpret NPS, satisfaction scores, and open-ended responses
-- **Response optimization** — Tips to boost completion rates
-- **Survey generation** — Describe what you need and I'll create it
-
-For quick survey creation, try the **"Generate with AI"** tab — just describe your topic and I'll build a complete survey.
-
-What specific aspect of survey design would you like to explore?`;
-}
+const AI_MODELS = [
+  { id: "claude", label: "Claude Sonnet 4.6" },
+  { id: "gpt", label: "GPT-4o" },
+  { id: "kimi", label: "Kimi 2.5" },
+  { id: "glm", label: "GLM 5" },
+] as const;
 
 // ── Component ─────────────────────────────────────────────────────────
 
@@ -251,7 +95,7 @@ export default function AiStudioPage() {
 
   // ── Generate state ──────────────────────────────────────────────────
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gpt-4o");
+  const [selectedModel, setSelectedModel] = useState("claude");
   const [generating, setGenerating] = useState(false);
   const [generatedSurvey, setGeneratedSurvey] = useState<GeneratedSurvey | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -265,7 +109,8 @@ export default function AiStudioPage() {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [recordingTime, setRecordingTime] = useState(0);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -403,77 +248,92 @@ export default function AiStudioPage() {
     }
   }, []);
 
-  const startRecording = useCallback(() => {
+  const startRecording = useCallback(async () => {
     setVoiceError(null);
     setTranscript("");
     setRecordingTime(0);
+    chunksRef.current = [];
 
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
 
-    if (!SpeechRecognition) {
-      setVoiceError(
-        "Speech recognition is not supported in this browser. Try Chrome or Edge."
-      );
-      return;
-    }
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
-    let finalTranscript = "";
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript + " ";
-        } else {
-          interim += result[0].transcript;
+      mediaRecorder.onstop = async () => {
+        setIsRecording(false);
+        stopAudioVisualization();
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
         }
-      }
-      setTranscript(finalTranscript + interim);
-    };
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error === "not-allowed") {
+        if (chunksRef.current.length === 0) return;
+
+        // Send to Deepgram via our API
+        setIsTranscribing(true);
+        try {
+          const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "recording.webm");
+          formData.append("language", "auto");
+
+          const res = await fetch("/api/ai/transcribe", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Transcription failed");
+
+          if (data.transcript) {
+            setTranscript(data.transcript);
+          } else {
+            setVoiceError("No speech detected. Please try again.");
+          }
+        } catch (err) {
+          setVoiceError(
+            err instanceof Error ? err.message : "Transcription failed"
+          );
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(1000); // collect in 1s chunks
+      setIsRecording(true);
+
+      // Start timer
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+
+      // Start audio visualization
+      startAudioVisualization();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
         setVoiceError("Microphone access denied. Please allow microphone access and try again.");
-      } else if (event.error !== "aborted") {
-        setVoiceError(`Recognition error: ${event.error}`);
+      } else {
+        setVoiceError("Failed to start recording. Check microphone permissions.");
       }
-      setIsRecording(false);
-      stopAudioVisualization();
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-      stopAudioVisualization();
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsRecording(true);
-
-    // Start timer
-    timerRef.current = setInterval(() => {
-      setRecordingTime((prev) => prev + 1);
-    }, 1000);
-
-    // Start audio visualization
-    startAudioVisualization();
+    }
   }, [startAudioVisualization, stopAudioVisualization]);
 
   const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
     }
-    setIsRecording(false);
+    mediaRecorderRef.current = null;
+    // Stream cleanup happens in stopAudioVisualization
     stopAudioVisualization();
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -492,7 +352,9 @@ export default function AiStudioPage() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) recognitionRef.current.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
       if (timerRef.current) clearInterval(timerRef.current);
       stopAudioVisualization();
     };
@@ -522,22 +384,49 @@ export default function AiStudioPage() {
       setChatInput("");
       setChatLoading(true);
 
-      // Simulate slight delay for natural feel
-      await new Promise((r) => setTimeout(r, 600 + Math.random() * 800));
+      try {
+        // Build messages history for context (last 20 messages)
+        const history = [...chatMessages, userMsg]
+          .filter((m) => m.id !== "welcome")
+          .slice(-20)
+          .map((m) => ({ role: m.role, content: m.content }));
 
-      const response = getAIResponse(message);
+        const res = await fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: history,
+            model: selectedModel,
+          }),
+        });
 
-      const assistantMsg: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: response,
-        timestamp: new Date(),
-      };
+        const data = await res.json();
 
-      setChatMessages((prev) => [...prev, assistantMsg]);
-      setChatLoading(false);
+        if (!res.ok) {
+          throw new Error(data.error || "Chat request failed");
+        }
+
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: data.content,
+          timestamp: new Date(),
+        };
+
+        setChatMessages((prev) => [...prev, assistantMsg]);
+      } catch (err) {
+        const errorMsg: ChatMessage = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: `Sorry, I encountered an error: ${err instanceof Error ? err.message : "Unknown error"}. Please try again.`,
+          timestamp: new Date(),
+        };
+        setChatMessages((prev) => [...prev, errorMsg]);
+      } finally {
+        setChatLoading(false);
+      }
     },
-    [chatInput]
+    [chatInput, chatMessages, selectedModel]
   );
 
   const clearChat = useCallback(() => {
@@ -645,21 +534,17 @@ export default function AiStudioPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">Model:</span>
                   <div className="flex rounded-lg border border-border">
-                    {["gpt-4o", "claude", "gemini"].map((model) => (
+                    {AI_MODELS.map((m) => (
                       <button
-                        key={model}
-                        onClick={() => setSelectedModel(model)}
+                        key={m.id}
+                        onClick={() => setSelectedModel(m.id)}
                         className={`px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${
-                          selectedModel === model
+                          selectedModel === m.id
                             ? "bg-primary text-primary-foreground"
                             : "text-muted-foreground hover:bg-accent"
                         }`}
                       >
-                        {model === "gpt-4o"
-                          ? "GPT-4o"
-                          : model === "claude"
-                            ? "Claude"
-                            : "Gemini"}
+                        {m.label}
                       </button>
                     ))}
                   </div>
