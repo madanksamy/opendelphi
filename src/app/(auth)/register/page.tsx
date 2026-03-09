@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Eye, EyeOff, Mail, Lock, User, Phone, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -9,7 +8,6 @@ import { createClient } from "@/lib/supabase/client";
 type AuthMode = "email" | "phone";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("email");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -97,7 +95,7 @@ export default function RegisterPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     }
   }
 

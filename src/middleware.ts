@@ -1,6 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-const publicPaths = ["/", "/login", "/register", "/signup", "/auth", "/auth/callback", "/api/webhooks", "/s/"];
+const publicPaths = [
+  "/", "/login", "/register", "/signup", "/auth", "/auth/callback", "/api/webhooks", "/s/",
+  "/about", "/contact", "/privacy", "/terms", "/careers", "/blog", "/community", "/partners",
+  "/docs", "/tutorials", "/developers",
+  "/features/", "/solutions/",
+];
 
 function isPublicPath(pathname: string): boolean {
   return publicPaths.some(

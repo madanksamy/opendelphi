@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils/cn";
 import { useUIStore } from "@/stores/ui-store";
 import { useUser } from "@/components/providers/UserProvider";
 import {
-  BarChart3,
   Brain,
   ChevronLeft,
   ClipboardList,
@@ -24,7 +23,6 @@ const navItems = [
   { label: "Delphi", href: "/delphi", icon: Brain },
   { label: "Templates", href: "/templates", icon: LayoutTemplate },
   { label: "AI Studio", href: "/ai-studio", icon: Sparkles },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Integrations", href: "/integrations", icon: Plug },
 ];
 
