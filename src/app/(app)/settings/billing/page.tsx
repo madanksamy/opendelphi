@@ -1,27 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   CreditCard,
   Check,
   Zap,
-  Building2,
   Sparkles,
-  Download,
-  ExternalLink,
   Receipt,
-  BarChart3,
   HardDrive,
   MessageSquare,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
+import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@/components/providers/UserProvider";
+
+interface UsageMeter {
+  label: string;
+  used: number;
+  limit: number;
+  unit?: string;
+  icon: typeof FileText;
+}
+
+interface OrgData {
+  plan: string;
+  plan_expires_at: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+}
+
+const planLimits: Record<string, { surveys: number; responses: number; members: number }> = {
+  free: { surveys: 3, responses: 100, members: 1 },
+  pro: { surveys: 25, responses: 5000, members: 5 },
+  business: { surveys: 999999, responses: 25000, members: 25 },
+  enterprise: { surveys: 999999, responses: 999999, members: 999999 },
+};
 
 const plans = [
   {
     name: "Free",
+    key: "free",
     price: "$0",
     period: "",
     description: "For individuals getting started",
@@ -32,12 +53,11 @@ const plans = [
       "Basic analytics",
       "Community support",
     ],
-    current: false,
-    cta: "Downgrade",
     highlight: false,
   },
   {
     name: "Pro",
+    key: "pro",
     price: "$29",
     period: "/mo",
     description: "For growing teams",
@@ -50,12 +70,11 @@ const plans = [
       "Priority email support",
       "Custom branding",
     ],
-    current: true,
-    cta: "Current Plan",
     highlight: true,
   },
   {
     name: "Business",
+    key: "business",
     price: "$79",
     period: "/mo",
     description: "For scaling organizations",
@@ -70,12 +89,11 @@ const plans = [
       "SSO / SAML",
       "API access",
     ],
-    current: false,
-    cta: "Upgrade",
     highlight: false,
   },
   {
     name: "Enterprise",
+    key: "enterprise",
     price: "Custom",
     period: "",
     description: "For large organizations",
@@ -90,91 +108,139 @@ const plans = [
       "On-premise deployment",
       "Audit logs",
     ],
-    current: false,
-    cta: "Contact Sales",
     highlight: false,
   },
 ];
 
-const usageMeters = [
-  {
-    label: "Active Surveys",
-    used: 18,
-    limit: 25,
-    icon: FileText,
-  },
-  {
-    label: "Responses This Month",
-    used: 3247,
-    limit: 5000,
-    icon: MessageSquare,
-  },
-  {
-    label: "Storage",
-    used: 2.4,
-    limit: 5,
-    unit: "GB",
-    icon: HardDrive,
-  },
-  {
-    label: "AI Tokens",
-    used: 42000,
-    limit: 100000,
-    icon: Sparkles,
-  },
-];
-
-const invoices = [
-  {
-    id: "INV-2026-005",
-    date: "2026-03-01",
-    amount: "$29.00",
-    status: "Paid",
-    plan: "Pro",
-  },
-  {
-    id: "INV-2026-004",
-    date: "2026-02-01",
-    amount: "$29.00",
-    status: "Paid",
-    plan: "Pro",
-  },
-  {
-    id: "INV-2026-003",
-    date: "2026-01-01",
-    amount: "$29.00",
-    status: "Paid",
-    plan: "Pro",
-  },
-  {
-    id: "INV-2025-012",
-    date: "2025-12-01",
-    amount: "$29.00",
-    status: "Paid",
-    plan: "Pro",
-  },
-  {
-    id: "INV-2025-011",
-    date: "2025-11-01",
-    amount: "$0.00",
-    status: "Paid",
-    plan: "Free",
-  },
-];
-
-function getStatusColor(status: string) {
-  return status === "Paid"
-    ? "bg-emerald-500/10 text-emerald-600"
-    : "bg-amber-500/10 text-amber-600";
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export default function BillingPage() {
+  const supabase = createClient();
+  const { orgId } = useUser();
+
+  const [loading, setLoading] = useState(true);
+  const [orgData, setOrgData] = useState<OrgData | null>(null);
+  const [surveyCount, setSurveyCount] = useState(0);
+  const [responseCount, setResponseCount] = useState(0);
+  const [memberCount, setMemberCount] = useState(0);
+
+  const loadBillingData = useCallback(async () => {
+    if (!orgId) return;
+
+    setLoading(true);
+    try {
+      // Fetch org plan data
+      const { data: org } = await supabase
+        .from("organizations")
+        .select(
+          "plan, plan_expires_at, stripe_customer_id, stripe_subscription_id"
+        )
+        .eq("id", orgId)
+        .single();
+
+      if (org) {
+        setOrgData(org as OrgData);
+      }
+
+      // Count surveys
+      const { count: surveys } = await supabase
+        .from("surveys")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", orgId);
+
+      setSurveyCount(surveys ?? 0);
+
+      // Count responses for this org's surveys
+      const { data: orgSurveys } = await supabase
+        .from("surveys")
+        .select("id")
+        .eq("org_id", orgId);
+
+      if (orgSurveys && orgSurveys.length > 0) {
+        const surveyIds = orgSurveys.map((s: { id: string }) => s.id);
+        const { count: responses } = await supabase
+          .from("responses")
+          .select("id", { count: "exact", head: true })
+          .in("survey_id", surveyIds);
+
+        setResponseCount(responses ?? 0);
+      }
+
+      // Count members
+      const { count: members } = await supabase
+        .from("org_members")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", orgId);
+
+      setMemberCount(members ?? 0);
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId, supabase]);
+
+  useEffect(() => {
+    loadBillingData();
+  }, [loadBillingData]);
+
+  const currentPlan = orgData?.plan ?? "free";
+  const limits = planLimits[currentPlan] ?? planLimits.free;
+
+  const usageMeters: UsageMeter[] = [
+    {
+      label: "Active Surveys",
+      used: surveyCount,
+      limit: limits.surveys > 99999 ? surveyCount : limits.surveys,
+      icon: FileText,
+    },
+    {
+      label: "Total Responses",
+      used: responseCount,
+      limit: limits.responses > 99999 ? responseCount : limits.responses,
+      icon: MessageSquare,
+    },
+    {
+      label: "Team Members",
+      used: memberCount,
+      limit: limits.members > 99999 ? memberCount : limits.members,
+      icon: Sparkles,
+    },
+    {
+      label: "Storage",
+      used: 0,
+      limit: 0,
+      unit: "N/A",
+      icon: HardDrive,
+    },
+  ];
+
+  const getCtaForPlan = (planKey: string): string => {
+    if (planKey === currentPlan) return "Current Plan";
+    const planOrder = ["free", "pro", "business", "enterprise"];
+    const currentIdx = planOrder.indexOf(currentPlan);
+    const planIdx = planOrder.indexOf(planKey);
+    if (planKey === "enterprise") return "Contact Sales";
+    return planIdx > currentIdx ? "Upgrade" : "Downgrade";
+  };
+
+  if (loading) {
+    return (
+      <div className="mx-auto flex max-w-6xl items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">
+          Loading billing data...
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">
-          Billing & Plans
+          Billing &amp; Plans
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Manage your subscription, usage, and payment methods.
@@ -190,17 +256,25 @@ export default function BillingPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-foreground">Pro Plan</h2>
+                <h2 className="text-lg font-bold text-foreground">
+                  {capitalize(currentPlan)} Plan
+                </h2>
                 <Badge>Active</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                $29/month &middot; Billed monthly &middot; Renews Mar 28, 2026
+                {currentPlan === "free"
+                  ? "Free forever"
+                  : orgData?.plan_expires_at
+                    ? `Renews ${new Date(orgData.plan_expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    : "Active subscription"}
               </p>
             </div>
           </div>
-          <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-accent">
-            Manage Subscription
-          </button>
+          {currentPlan !== "free" && (
+            <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-accent">
+              Manage Subscription
+            </button>
+          )}
         </div>
       </div>
 
@@ -210,63 +284,67 @@ export default function BillingPage() {
           Compare Plans
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`relative rounded-2xl border p-6 ${
-                plan.highlight
-                  ? "border-primary bg-card shadow-md"
-                  : "border-border bg-card"
-              }`}
-            >
-              {plan.current && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="shadow-sm">Current Plan</Badge>
-                </div>
-              )}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-card-foreground">
-                  {plan.name}
-                </h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {plan.description}
-                </p>
-              </div>
-              <div className="mb-5">
-                <span className="text-3xl font-bold text-card-foreground">
-                  {plan.price}
-                </span>
-                {plan.period && (
-                  <span className="text-sm text-muted-foreground">
-                    {plan.period}
-                  </span>
-                )}
-              </div>
-              <ul className="mb-6 space-y-2">
-                {plan.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="flex items-start gap-2 text-sm text-muted-foreground"
-                  >
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              <button
-                disabled={plan.current}
-                className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
-                  plan.current
-                    ? "cursor-default border border-primary/30 bg-primary/5 text-primary"
-                    : plan.highlight
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "border border-border bg-card text-card-foreground hover:bg-accent"
+          {plans.map((plan) => {
+            const isCurrent = plan.key === currentPlan;
+            const cta = getCtaForPlan(plan.key);
+            return (
+              <div
+                key={plan.name}
+                className={`relative rounded-2xl border p-6 ${
+                  isCurrent
+                    ? "border-primary bg-card shadow-md"
+                    : "border-border bg-card"
                 }`}
               >
-                {plan.cta}
-              </button>
-            </div>
-          ))}
+                {isCurrent && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="shadow-sm">Current Plan</Badge>
+                  </div>
+                )}
+                <div className="mb-4">
+                  <h3 className="text-base font-semibold text-card-foreground">
+                    {plan.name}
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {plan.description}
+                  </p>
+                </div>
+                <div className="mb-5">
+                  <span className="text-3xl font-bold text-card-foreground">
+                    {plan.price}
+                  </span>
+                  {plan.period && (
+                    <span className="text-sm text-muted-foreground">
+                      {plan.period}
+                    </span>
+                  )}
+                </div>
+                <ul className="mb-6 space-y-2">
+                  {plan.features.map((feature) => (
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2 text-sm text-muted-foreground"
+                    >
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  disabled={isCurrent}
+                  className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+                    isCurrent
+                      ? "cursor-default border border-primary/30 bg-primary/5 text-primary"
+                      : plan.highlight
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "border border-border bg-card text-card-foreground hover:bg-accent"
+                  }`}
+                >
+                  {cta}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -313,7 +391,10 @@ export default function BillingPage() {
                 { feature: "Dedicated Support", free: "-", pro: "-", business: "-", enterprise: "check" },
                 { feature: "Audit Logs", free: "-", pro: "-", business: "-", enterprise: "check" },
               ].map((row) => (
-                <tr key={row.feature} className="transition-colors hover:bg-muted/50">
+                <tr
+                  key={row.feature}
+                  className="transition-colors hover:bg-muted/50"
+                >
                   <td className="px-6 py-3 font-medium text-card-foreground">
                     {row.feature}
                   </td>
@@ -323,7 +404,9 @@ export default function BillingPage() {
                         {row[plan] === "check" ? (
                           <Check className="mx-auto h-4 w-4 text-primary" />
                         ) : row[plan] === "-" ? (
-                          <span className="text-muted-foreground/40">&mdash;</span>
+                          <span className="text-muted-foreground/40">
+                            &mdash;
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">
                             {row[plan]}
@@ -346,8 +429,17 @@ export default function BillingPage() {
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {usageMeters.map((meter) => {
-            const percentage = Math.round((meter.used / meter.limit) * 100);
-            const isHigh = percentage > 80;
+            const isStorageNA = meter.unit === "N/A";
+            const percentage =
+              isStorageNA || meter.limit === 0
+                ? 0
+                : Math.min(
+                    100,
+                    Math.round((meter.used / meter.limit) * 100)
+                  );
+            const isHigh = percentage > 80 && !isStorageNA;
+            const isUnlimited = meter.limit === meter.used && currentPlan === "enterprise";
+
             return (
               <div
                 key={meter.label}
@@ -363,28 +455,34 @@ export default function BillingPage() {
                   {isHigh && (
                     <Badge
                       variant="destructive"
-                      className="text-[10px] px-1.5 py-0"
+                      className="px-1.5 py-0 text-[10px]"
                     >
                       {percentage}%
                     </Badge>
                   )}
                 </div>
                 <div className="mt-3">
-                  <Progress value={percentage} className="h-2" />
+                  <Progress
+                    value={isStorageNA ? 0 : percentage}
+                    className="h-2"
+                  />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
-                    {meter.unit
-                      ? `${meter.used} ${meter.unit}`
-                      : meter.used.toLocaleString()}{" "}
-                    used
-                  </span>
-                  <span>
-                    {meter.unit
-                      ? `${meter.limit} ${meter.unit}`
-                      : meter.limit.toLocaleString()}{" "}
-                    limit
-                  </span>
+                  {isStorageNA ? (
+                    <>
+                      <span>N/A</span>
+                      <span>Storage tracking not available</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{meter.used.toLocaleString()} used</span>
+                      <span>
+                        {isUnlimited
+                          ? "Unlimited"
+                          : `${meter.limit.toLocaleString()} limit`}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -407,23 +505,10 @@ export default function BillingPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center justify-between p-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-20 items-center justify-center rounded-lg border border-border bg-gradient-to-br from-blue-600 to-blue-800">
-              <span className="text-xs font-bold tracking-wider text-white">
-                VISA
-              </span>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-card-foreground">
-                Visa ending in 4242
-              </p>
-              <p className="text-xs text-muted-foreground">Expires 12/2027</p>
-            </div>
-          </div>
-          <button className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-card-foreground transition-colors hover:bg-accent">
-            Update
-          </button>
+        <div className="p-6">
+          <p className="text-sm text-muted-foreground">
+            No payment method on file.
+          </p>
         </div>
       </div>
 
@@ -442,70 +527,8 @@ export default function BillingPage() {
             </p>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Invoice
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Plan
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Download
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {invoices.map((inv) => (
-                <tr
-                  key={inv.id}
-                  className="transition-colors hover:bg-muted/50"
-                >
-                  <td className="px-6 py-3">
-                    <span className="text-sm font-medium text-card-foreground">
-                      {inv.id}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 text-sm text-muted-foreground">
-                    {new Date(inv.date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </td>
-                  <td className="px-6 py-3 text-sm text-muted-foreground">
-                    {inv.plan}
-                  </td>
-                  <td className="px-6 py-3 text-sm font-medium text-card-foreground">
-                    {inv.amount}
-                  </td>
-                  <td className="px-6 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusColor(inv.status)}`}
-                    >
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 text-right">
-                    <button className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                      <Download className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+          No invoices yet.
         </div>
       </div>
     </div>

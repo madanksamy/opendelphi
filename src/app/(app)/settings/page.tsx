@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Building2,
   Globe,
@@ -10,6 +10,10 @@ import {
   Save,
   AlertTriangle,
   Trash2,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -33,25 +37,146 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@/components/providers/UserProvider";
+
+interface OrgSettings {
+  default_language?: string;
+  timezone?: string;
+  notifications?: NotificationPreferences;
+}
+
+interface NotificationPreferences {
+  surveyResponses: boolean;
+  weeklyDigest: boolean;
+  teamInvites: boolean;
+  surveyCompletion: boolean;
+  productUpdates: boolean;
+  securityAlerts: boolean;
+}
+
+const defaultNotifications: NotificationPreferences = {
+  surveyResponses: true,
+  weeklyDigest: true,
+  teamInvites: true,
+  surveyCompletion: true,
+  productUpdates: false,
+  securityAlerts: true,
+};
+
+type SaveStatus = "idle" | "saving" | "success" | "error";
 
 export default function SettingsPage() {
-  const [orgName, setOrgName] = useState("Acme Health Research");
-  const [orgSlug, setOrgSlug] = useState("acme-health");
+  const supabase = createClient();
+  const { user, profile, org, orgId } = useUser();
+
+  const [loading, setLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Organization fields
+  const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
+
+  // Profile fields
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+
+  // Settings fields
   const [language, setLanguage] = useState("en");
   const [timezone, setTimezone] = useState("America/New_York");
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
-  const [notifications, setNotifications] = useState({
-    surveyResponses: true,
-    weeklyDigest: true,
-    teamInvites: true,
-    surveyCompletion: true,
-    productUpdates: false,
-    securityAlerts: true,
-  });
+  const [notifications, setNotifications] =
+    useState<NotificationPreferences>(defaultNotifications);
 
-  const toggleNotification = (key: keyof typeof notifications) => {
+  const loadData = useCallback(async () => {
+    if (!orgId || !user) return;
+
+    setLoading(true);
+    try {
+      // Load organization details (including settings JSONB)
+      const { data: orgData } = await supabase
+        .from("organizations")
+        .select("name, slug, settings")
+        .eq("id", orgId)
+        .single();
+
+      if (orgData) {
+        setOrgName(orgData.name ?? "");
+        setOrgSlug(orgData.slug ?? "");
+        const settings = (orgData.settings ?? {}) as OrgSettings;
+        if (settings.default_language) setLanguage(settings.default_language);
+        if (settings.timezone) setTimezone(settings.timezone);
+        if (settings.notifications) {
+          setNotifications({ ...defaultNotifications, ...settings.notifications });
+        }
+      }
+
+      // Load profile
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("full_name, email, phone")
+        .eq("id", user.id)
+        .single();
+
+      if (profileData) {
+        setFullName(profileData.full_name ?? "");
+        setEmail(profileData.email ?? "");
+        setPhone(profileData.phone ?? "");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId, user, supabase]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const toggleNotification = (key: keyof NotificationPreferences) => {
     setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSave = async () => {
+    if (!orgId || !user) return;
+
+    setSaveStatus("saving");
+    setSaveError(null);
+
+    try {
+      const settings: OrgSettings = {
+        default_language: language,
+        timezone,
+        notifications,
+      };
+
+      // Update organization
+      const { error: orgError } = await supabase
+        .from("organizations")
+        .update({ name: orgName, slug: orgSlug, settings })
+        .eq("id", orgId);
+
+      if (orgError) throw orgError;
+
+      // Update profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName, phone })
+        .eq("id", user.id);
+
+      if (profileError) throw profileError;
+
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save settings";
+      setSaveError(message);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 5000);
+    }
   };
 
   const notificationItems = [
@@ -93,6 +218,17 @@ export default function SettingsPage() {
     },
   ];
 
+  if (loading) {
+    return (
+      <div className="mx-auto flex max-w-3xl items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">
+          Loading settings...
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       {/* Header */}
@@ -101,6 +237,55 @@ export default function SettingsPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Manage your organization settings and preferences.
         </p>
+      </div>
+
+      {/* Profile Info */}
+      <div className="rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <User className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-card-foreground">
+              Your Profile
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Personal account details
+            </p>
+          </div>
+        </div>
+        <div className="space-y-5 p-6">
+          <div className="space-y-2">
+            <Label htmlFor="full-name">Full name</Label>
+            <Input
+              id="full-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Your full name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              value={email}
+              disabled
+              className="bg-muted/50"
+            />
+            <p className="text-xs text-muted-foreground">
+              Email is managed through your authentication provider.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone</Label>
+            <Input
+              id="phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 (555) 000-0000"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Organization Info */}
@@ -262,11 +447,31 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-          <Save className="h-4 w-4" />
-          Save Changes
+      {/* Save Button + Status */}
+      <div className="flex items-center justify-end gap-3">
+        {saveStatus === "success" && (
+          <div className="flex items-center gap-1.5 text-sm text-emerald-600">
+            <CheckCircle2 className="h-4 w-4" />
+            Settings saved successfully
+          </div>
+        )}
+        {saveStatus === "error" && (
+          <div className="flex items-center gap-1.5 text-sm text-destructive">
+            <XCircle className="h-4 w-4" />
+            {saveError ?? "Failed to save"}
+          </div>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saveStatus === "saving"}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saveStatus === "saving" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
+          {saveStatus === "saving" ? "Saving..." : "Save Changes"}
         </button>
       </div>
 
@@ -312,13 +517,11 @@ export default function SettingsPage() {
               </DialogHeader>
               <div className="space-y-3 py-4">
                 <div className="rounded-lg bg-destructive/5 p-3 text-sm text-destructive">
-                  <p className="font-medium">You will lose:</p>
-                  <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs">
-                    <li>24 surveys and all response data</li>
-                    <li>4,821 survey responses</li>
-                    <li>8 team member accounts</li>
-                    <li>All integrations and API keys</li>
-                  </ul>
+                  <p className="font-medium">
+                    This will permanently delete &ldquo;{orgName}&rdquo; and all
+                    associated data including surveys, responses, and team
+                    memberships.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="delete-confirm">

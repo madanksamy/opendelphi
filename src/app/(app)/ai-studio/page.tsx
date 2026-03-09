@@ -1,26 +1,50 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   Mic,
-  MicOff,
   MessageCircle,
-  Send,
   Wand2,
-  ChevronRight,
-  Bot,
-  User,
   Copy,
   ArrowRight,
-  Play,
-  Square,
-  Volume2,
+  Loader2,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
+import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@/components/providers/UserProvider";
+
+// ── Types ─────────────────────────────────────────────────────────────
+
+interface GeneratedField {
+  id: string;
+  type: string;
+  label: string;
+  required?: boolean;
+  description?: string;
+  options?: Array<{ id: string; label: string; value: string }>;
+  properties?: Record<string, unknown>;
+  validation?: Record<string, unknown>;
+}
+
+interface GeneratedSurvey {
+  title: string;
+  description: string;
+  fields: GeneratedField[];
+  settings: {
+    allowAnonymous: boolean;
+    showProgressBar: boolean;
+    showQuestionNumbers: boolean;
+    confirmationMessage: string;
+  };
+  generatedAt: string;
+}
+
+// ── Static data ───────────────────────────────────────────────────────
 
 const examplePrompts = [
   "Create a patient satisfaction survey for a cardiology clinic",
@@ -29,99 +53,92 @@ const examplePrompts = [
   "Generate a product-market fit survey for a B2B SaaS",
 ];
 
-const mockGeneratedSurvey = {
-  title: "Patient Satisfaction Survey — Cardiology Clinic",
-  questions: [
-    {
-      type: "Rating",
-      text: "How would you rate your overall experience at our cardiology clinic?",
-      scale: "1-5 stars",
-    },
-    {
-      type: "Multiple Choice",
-      text: "How long did you wait before being seen by a healthcare provider?",
-      options: [
-        "Less than 15 minutes",
-        "15-30 minutes",
-        "30-60 minutes",
-        "More than 1 hour",
-      ],
-    },
-    {
-      type: "Rating",
-      text: "How well did your cardiologist explain your diagnosis and treatment options?",
-      scale: "1-5 stars",
-    },
-    {
-      type: "Multiple Choice",
-      text: "Did the staff treat you with courtesy and respect?",
-      options: ["Always", "Usually", "Sometimes", "Rarely", "Never"],
-    },
-    {
-      type: "Open Text",
-      text: "What could we do to improve your experience at our clinic?",
-    },
-  ],
-};
-
-const mockTranscript = [
-  {
-    speaker: "user",
-    text: "I need a quick survey for our quarterly team retrospective.",
-  },
-  {
-    speaker: "ai",
-    text: "Got it! I will create a team retrospective survey. Let me ask a few questions. How many team members will be taking this survey?",
-  },
-  {
-    speaker: "user",
-    text: "About 12 people. I want to know what went well, what didn't, and suggestions for next quarter.",
-  },
-  {
-    speaker: "ai",
-    text: "Perfect. I have generated a 6-question retrospective survey with rating scales and open-ended questions. It covers wins, challenges, team collaboration, and forward-looking suggestions.",
-  },
-];
-
-const mockChatMessages = [
-  {
-    role: "user" as const,
-    content: "Hi, I have a question about our billing. We were charged $79 but we're on the Pro plan at $29/month.",
-    time: "2:34 PM",
-  },
-  {
-    role: "ai" as const,
-    content:
-      "I can help you with that! Let me look into your billing history. I see that on March 1st, your account was upgraded from Pro ($29/mo) to Business ($79/mo). This was initiated by your team admin Marcus Chen. Would you like me to help you revert to the Pro plan, or would you like more details about what changed?",
-    time: "2:34 PM",
-  },
-  {
-    role: "user" as const,
-    content: "Oh I see, Marcus must have upgraded it. Can you show me what extra features we get with Business?",
-    time: "2:35 PM",
-  },
-  {
-    role: "ai" as const,
-    content:
-      "Of course! Here is what the Business plan ($79/mo) adds over Pro ($29/mo):\n\n- Unlimited surveys (vs 25)\n- 25,000 responses/month (vs 5,000)\n- 25 team members (vs 5)\n- SSO / SAML authentication\n- API access for custom integrations\n- Priority support with Slack channel\n\nGiven your team of 8 members and growing survey volume, the Business plan gives you room to scale. Would you like to keep it, or shall I help downgrade back to Pro?",
-    time: "2:35 PM",
-  },
-];
-
-const quickActions = [
-  "How do I export survey data?",
-  "Help me create a Delphi study",
-  "What integrations are available?",
-  "Show my usage this month",
-];
+// ── Component ─────────────────────────────────────────────────────────
 
 export default function AiStudioPage() {
+  const router = useRouter();
+  const { user, orgId } = useUser();
+
   const [activeTab, setActiveTab] = useState("generate");
   const [prompt, setPrompt] = useState("");
-  const [showGenerated, setShowGenerated] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
-  const [chatInput, setChatInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gpt-4o");
+  const [generating, setGenerating] = useState(false);
+  const [generatedSurvey, setGeneratedSurvey] = useState<GeneratedSurvey | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [creatingSurvey, setCreatingSurvey] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleGenerate() {
+    if (!prompt.trim()) return;
+    setGenerating(true);
+    setGenerateError(null);
+    setGeneratedSurvey(null);
+
+    try {
+      const res = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: prompt,
+          model: selectedModel,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Generation failed (${res.status})`);
+      }
+
+      const data: GeneratedSurvey = await res.json();
+      setGeneratedSurvey(data);
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : "An unexpected error occurred");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleCreateSurvey() {
+    if (!generatedSurvey || !user || !orgId) return;
+    setCreatingSurvey(true);
+
+    try {
+      const supabase = createClient();
+      const slug = `${generatedSurvey.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "")}-${Date.now().toString(36)}`;
+
+      const { data, error } = await supabase
+        .from("surveys")
+        .insert({
+          org_id: orgId,
+          created_by: user.id,
+          title: generatedSurvey.title,
+          description: generatedSurvey.description,
+          slug,
+          type: "standard",
+          status: "draft",
+          schema: { fields: generatedSurvey.fields },
+          settings: generatedSurvey.settings,
+          theme: {},
+          multi_step: false,
+          version: 1,
+        })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      router.push(`/surveys/${data.id}/edit`);
+    } catch (err) {
+      console.error("Failed to create survey:", err);
+      setCreatingSurvey(false);
+    }
+  }
+
+  function handleCopy() {
+    if (!generatedSurvey) return;
+    navigator.clipboard.writeText(JSON.stringify(generatedSurvey, null, 2));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -152,11 +169,11 @@ export default function AiStudioPage() {
           </TabsTrigger>
           <TabsTrigger value="support" className="gap-2">
             <MessageCircle className="h-4 w-4" />
-            AI Support
+            AI Chat
           </TabsTrigger>
         </TabsList>
 
-        {/* Generate Tab */}
+        {/* ── Generate Tab ─────────────────────────────────────────── */}
         <TabsContent value="generate" className="space-y-6">
           {/* Input Section */}
           <div className="rounded-2xl border border-border bg-card p-6">
@@ -172,6 +189,11 @@ export default function AiStudioPage() {
                     placeholder="Describe the survey you want to create..."
                     rows={3}
                     className="w-full resize-none rounded-xl border border-input bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        handleGenerate();
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -219,18 +241,38 @@ export default function AiStudioPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowGenerated(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                  onClick={handleGenerate}
+                  disabled={generating || !prompt.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
                 >
-                  <Sparkles className="h-4 w-4" />
-                  Generate Survey
+                  {generating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      Generate Survey
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
 
+          {/* Error */}
+          {generateError && (
+            <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+              <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
+              <p className="text-sm text-red-700 dark:text-red-400">
+                {generateError}
+              </p>
+            </div>
+          )}
+
           {/* Generated Preview */}
-          {showGenerated && (
+          {generatedSurvey && (
             <div className="rounded-2xl border border-primary/20 bg-card">
               <div className="flex items-center justify-between border-b border-border px-6 py-4">
                 <div className="flex items-center gap-3">
@@ -242,23 +284,35 @@ export default function AiStudioPage() {
                       Generated Survey
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      {mockGeneratedSurvey.questions.length} questions
-                      &middot; Estimated 3 min to complete
+                      {generatedSurvey.fields.length} question{generatedSurvey.fields.length !== 1 ? "s" : ""}
                     </p>
                   </div>
                 </div>
-                <button className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted">
-                  <Copy className="h-4 w-4" />
+                <button
+                  onClick={handleCopy}
+                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted"
+                  title="Copy JSON"
+                >
+                  {copied ? (
+                    <span className="text-xs text-emerald-600">Copied!</span>
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
                 </button>
               </div>
               <div className="p-6">
-                <h4 className="mb-4 text-base font-semibold text-card-foreground">
-                  {mockGeneratedSurvey.title}
+                <h4 className="mb-1 text-base font-semibold text-card-foreground">
+                  {generatedSurvey.title}
                 </h4>
+                {generatedSurvey.description && (
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {generatedSurvey.description}
+                  </p>
+                )}
                 <div className="space-y-4">
-                  {mockGeneratedSurvey.questions.map((q, i) => (
+                  {generatedSurvey.fields.map((field, i) => (
                     <div
-                      key={i}
+                      key={field.id}
                       className="rounded-xl border border-border p-4"
                     >
                       <div className="mb-2 flex items-center gap-2">
@@ -266,35 +320,56 @@ export default function AiStudioPage() {
                           {i + 1}
                         </span>
                         <Badge variant="outline" className="text-[10px]">
-                          {q.type}
+                          {field.type}
                         </Badge>
+                        {field.required && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Required
+                          </Badge>
+                        )}
                       </div>
-                      <p className="text-sm text-card-foreground">{q.text}</p>
-                      {q.options && (
+                      <p className="text-sm text-card-foreground">
+                        {field.label}
+                      </p>
+                      {field.options && (
                         <div className="mt-2 space-y-1">
-                          {q.options.map((opt) => (
+                          {field.options.map((opt) => (
                             <div
-                              key={opt}
+                              key={opt.id}
                               className="flex items-center gap-2 text-xs text-muted-foreground"
                             >
                               <span className="h-3 w-3 rounded-full border border-border" />
-                              {opt}
+                              {opt.label}
                             </div>
                           ))}
                         </div>
                       )}
-                      {q.scale && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Scale: {q.scale}
-                        </p>
-                      )}
+                      {field.properties &&
+                        "maxRating" in field.properties && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Scale: 1-{String(field.properties.maxRating)} stars
+                          </p>
+                        )}
                     </div>
                   ))}
                 </div>
                 <div className="mt-6 flex justify-end">
-                  <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-                    Use This Survey
-                    <ArrowRight className="h-4 w-4" />
+                  <button
+                    onClick={handleCreateSurvey}
+                    disabled={creatingSurvey || !user || !orgId}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {creatingSurvey ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        Create Survey
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -302,226 +377,52 @@ export default function AiStudioPage() {
           )}
         </TabsContent>
 
-        {/* Voice Mode Tab */}
+        {/* ── Voice Mode Tab ───────────────────────────────────────── */}
         <TabsContent value="voice" className="space-y-6">
-          <div className="rounded-2xl border border-border bg-card p-8">
-            <div className="flex flex-col items-center">
-              {/* Microphone Button */}
-              <div className="relative">
-                {isRecording && (
-                  <div className="absolute inset-0 animate-ping rounded-full bg-red-500/20" />
-                )}
-                <button
-                  onClick={() => setIsRecording(!isRecording)}
-                  className={`relative z-10 flex h-24 w-24 items-center justify-center rounded-full transition-all ${
-                    isRecording
-                      ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
-                      : "bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:bg-primary/90"
-                  }`}
-                >
-                  {isRecording ? (
-                    <Square className="h-8 w-8" />
-                  ) : (
-                    <Mic className="h-8 w-8" />
-                  )}
-                </button>
+          <div className="rounded-2xl border border-border bg-card p-12">
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-4 rounded-full bg-muted p-6">
+                <Mic className="h-10 w-10 text-muted-foreground" />
               </div>
-              <p className="mt-4 text-sm font-medium text-card-foreground">
-                {isRecording
-                  ? "Listening... tap to stop"
-                  : "Tap to start recording"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Describe your survey using your voice
-              </p>
-
-              {/* Waveform Visualization */}
-              {isRecording && (
-                <div className="mt-6 flex h-16 w-full max-w-md items-center justify-center gap-1">
-                  {Array.from({ length: 40 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-1 rounded-full bg-primary"
-                      style={{
-                        height: `${Math.random() * 100}%`,
-                        animation: `pulse 0.5s ease-in-out ${i * 0.05}s infinite alternate`,
-                        minHeight: "4px",
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Transcript */}
-          <div className="rounded-2xl border border-border bg-card">
-            <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-              <div className="rounded-xl bg-primary/10 p-2">
-                <Volume2 className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-card-foreground">
-                  Transcript
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Voice Mode
                 </h3>
-                <p className="text-xs text-muted-foreground">
-                  Voice conversation history
-                </p>
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <Clock className="h-3 w-3" />
+                  Coming Soon
+                </Badge>
               </div>
-            </div>
-            <div className="space-y-4 p-6">
-              {mockTranscript.map((entry, i) => (
-                <div
-                  key={i}
-                  className={`flex gap-3 ${entry.speaker === "ai" ? "" : "justify-end"}`}
-                >
-                  {entry.speaker === "ai" && (
-                    <Avatar className="h-7 w-7 shrink-0">
-                      <AvatarFallback className="bg-primary/10 text-[10px] font-bold text-primary">
-                        AI
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                      entry.speaker === "ai"
-                        ? "bg-muted text-foreground"
-                        : "bg-primary text-primary-foreground"
-                    }`}
-                  >
-                    {entry.text}
-                  </div>
-                  {entry.speaker === "user" && (
-                    <Avatar className="h-7 w-7 shrink-0">
-                      <AvatarFallback className="bg-violet-500 text-[10px] font-bold text-white">
-                        JC
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="border-t border-border p-4">
-              <button className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-                <Sparkles className="h-4 w-4" />
-                Convert to Survey
-              </button>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Describe your survey using your voice and let AI convert your
+                words into a structured survey. This feature is currently in
+                development and will be available soon.
+              </p>
             </div>
           </div>
-
-          <style jsx>{`
-            @keyframes pulse {
-              0% {
-                transform: scaleY(0.3);
-              }
-              100% {
-                transform: scaleY(1);
-              }
-            }
-          `}</style>
         </TabsContent>
 
-        {/* AI Support Tab */}
-        <TabsContent value="support" className="space-y-0">
-          <div className="flex h-[600px] flex-col rounded-2xl border border-border bg-card">
-            {/* Chat Header */}
-            <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/10 text-xs font-bold text-primary">
-                  AI
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h3 className="text-sm font-semibold text-card-foreground">
-                  OpenDelphi Assistant
+        {/* ── AI Chat Tab ──────────────────────────────────────────── */}
+        <TabsContent value="support" className="space-y-6">
+          <div className="rounded-2xl border border-border bg-card p-12">
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-4 rounded-full bg-muted p-6">
+                <MessageCircle className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  AI Chat Assistant
                 </h3>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  <span className="text-xs text-muted-foreground">Online</span>
-                </div>
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <Clock className="h-3 w-3" />
+                  Coming Soon
+                </Badge>
               </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-4">
-                {mockChatMessages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
-                  >
-                    {msg.role === "ai" && (
-                      <Avatar className="h-7 w-7 shrink-0">
-                        <AvatarFallback className="bg-primary/10 text-[10px] font-bold text-primary">
-                          AI
-                        </AvatarFallback>
-                      </Avatar>
-                    )}
-                    <div className="max-w-[75%]">
-                      <div
-                        className={`rounded-2xl px-4 py-2.5 text-sm ${
-                          msg.role === "ai"
-                            ? "bg-muted text-foreground"
-                            : "bg-primary text-primary-foreground"
-                        }`}
-                      >
-                        <p className="whitespace-pre-line">{msg.content}</p>
-                      </div>
-                      <p
-                        className={`mt-1 text-[10px] text-muted-foreground ${msg.role === "user" ? "text-right" : ""}`}
-                      >
-                        {msg.time}
-                      </p>
-                    </div>
-                    {msg.role === "user" && (
-                      <Avatar className="h-7 w-7 shrink-0">
-                        <AvatarFallback className="bg-violet-500 text-[10px] font-bold text-white">
-                          JC
-                        </AvatarFallback>
-                      </Avatar>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="border-t border-border px-6 py-3">
-              <div className="flex gap-2 overflow-x-auto">
-                {quickActions.map((action) => (
-                  <button
-                    key={action}
-                    onClick={() => setChatInput(action)}
-                    className="shrink-0 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    {action}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Input */}
-            <div className="border-t border-border p-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask anything about OpenDelphi..."
-                  className="flex-1 rounded-xl border border-input bg-transparent px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      setChatInput("");
-                    }
-                  }}
-                />
-                <button
-                  onClick={() => setChatInput("")}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              </div>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Chat with an AI assistant to get help with your surveys,
+                understand your data, and manage your account. This feature is
+                currently in development and will be available soon.
+              </p>
             </div>
           </div>
         </TabsContent>

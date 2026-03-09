@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Calendar,
   Users,
   BarChart3,
-  Clock,
   Target,
   TrendingUp,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,15 +18,16 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils/cn";
+import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@/components/providers/UserProvider";
 import { ConsensusGauge } from "@/components/delphi/ConsensusGauge";
 import {
   RoundManager,
   type DelphiRound,
+  type RoundQuestion,
 } from "@/components/delphi/RoundManager";
 import {
   PanelManager,
@@ -35,186 +35,62 @@ import {
 } from "@/components/delphi/PanelManager";
 import { RoundComparison } from "@/components/delphi/RoundComparison";
 
-// ── Mock Data ──────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────
 
-const STUDY = {
-  id: "delphi-1",
-  title: "Clinical Treatment Protocol Consensus",
-  description:
-    "A multi-round Delphi study to establish expert consensus on first-line treatment approaches for chronic inflammatory conditions in adult patients aged 30-65. The study aims to develop standardized treatment protocols that can be adopted across academic medical centers.",
-  status: "active" as const,
-  methodology: "Modified Delphi with controlled feedback",
-  targetConsensus: 75,
-  createdAt: "2024-01-15T09:00:00Z",
-  startedAt: "2024-01-20T10:00:00Z",
-  estimatedCompletion: "2024-04-15T00:00:00Z",
-  questionCount: 5,
-};
+interface Survey {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  schema: SurveyField[] | null;
+  settings: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
 
-const QUESTIONS = [
-  "Recommended first-line treatment approach",
-  "Optimal treatment duration (months)",
-  "Minimum diagnostic criteria required",
-  "Follow-up frequency after initial treatment",
-  "Patient age threshold for aggressive intervention",
-];
+interface SurveyField {
+  id?: string;
+  label?: string;
+  type?: string;
+  [key: string]: unknown;
+}
 
-const MOCK_ROUNDS: DelphiRound[] = [
-  {
-    id: "r1",
-    number: 1,
-    status: "completed",
-    startDate: "2024-01-20T10:00:00Z",
-    endDate: "2024-02-03T23:59:59Z",
-    responseCount: 12,
-    totalPanelists: 12,
-    questions: QUESTIONS.map((q, i) => ({
-      id: `r1q${i}`,
-      text: q,
-      consensusPercent: [45, 35, 40, 35, 35][i],
-      responseCount: 12,
-    })),
-  },
-  {
-    id: "r2",
-    number: 2,
-    status: "completed",
-    startDate: "2024-02-05T10:00:00Z",
-    endDate: "2024-02-19T23:59:59Z",
-    responseCount: 11,
-    totalPanelists: 12,
-    questions: QUESTIONS.map((q, i) => ({
-      id: `r2q${i}`,
-      text: q,
-      consensusPercent: [62, 58, 65, 52, 55][i],
-      responseCount: 11,
-    })),
-  },
-  {
-    id: "r3",
-    number: 3,
-    status: "active",
-    startDate: "2024-02-21T10:00:00Z",
-    endDate: null,
-    responseCount: 10,
-    totalPanelists: 12,
-    questions: QUESTIONS.map((q, i) => ({
-      id: `r3q${i}`,
-      text: q,
-      consensusPercent: [78, 82, 85, 72, 75][i],
-      responseCount: 10,
-    })),
-  },
-  {
-    id: "r4",
-    number: 4,
-    status: "pending",
-    startDate: null,
-    endDate: null,
-    responseCount: 0,
-    totalPanelists: 12,
-    questions: [],
-  },
-];
+interface RoundRow {
+  id: string;
+  survey_id: string;
+  round_number: number;
+  status: string;
+  consensus_threshold: number;
+  summary: Record<string, unknown> | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  created_at: string;
+}
 
-const MOCK_PANELISTS: Panelist[] = [
-  {
-    id: "p1",
-    name: "Dr. Sarah Chen",
-    email: "s.chen@mayo.edu",
-    expertise: "Rheumatology",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p2",
-    name: "Dr. Michael Torres",
-    email: "m.torres@jhu.edu",
-    expertise: "Internal Medicine",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p3",
-    name: "Dr. Emily Watson",
-    email: "e.watson@stanford.edu",
-    expertise: "Immunology",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p4",
-    name: "Dr. James Park",
-    email: "j.park@clevelandclinic.org",
-    expertise: "Gastroenterology",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p5",
-    name: "Dr. Lisa Ramirez",
-    email: "l.ramirez@ucsf.edu",
-    expertise: "Dermatology",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p6",
-    name: "Dr. Robert Kim",
-    email: "r.kim@mit.edu",
-    expertise: "Pharmacology",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p7",
-    name: "Dr. Anna Müller",
-    email: "a.muller@charite.de",
-    expertise: "Rheumatology",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p8",
-    name: "Dr. David Okonkwo",
-    email: "d.okonkwo@upmc.edu",
-    expertise: "Internal Medicine",
-    status: "accepted",
-    responseStatus: "completed",
-  },
-  {
-    id: "p9",
-    name: "Dr. Maria Gonzalez",
-    email: "m.gonzalez@nyu.edu",
-    expertise: "Clinical Trials",
-    status: "accepted",
-    responseStatus: "in_progress",
-  },
-  {
-    id: "p10",
-    name: "Dr. William Chang",
-    email: "w.chang@uchicago.edu",
-    expertise: "Biostatistics",
-    status: "accepted",
-    responseStatus: "in_progress",
-  },
-  {
-    id: "p11",
-    name: "Dr. Fatima Al-Rashidi",
-    email: "f.alrashidi@kcl.ac.uk",
-    expertise: "Epidemiology",
-    status: "invited",
-    responseStatus: "not_started",
-  },
-  {
-    id: "p12",
-    name: "Dr. Henrik Johansson",
-    email: "h.johansson@ki.se",
-    expertise: "Pharmacology",
-    status: "declined",
-    responseStatus: "not_started",
-  },
-];
+interface PanelistRow {
+  id: string;
+  survey_id: string;
+  email: string;
+  name: string | null;
+  expertise: string | null;
+  token: string;
+  status: string;
+  invited_at: string | null;
+  created_at: string;
+}
+
+interface ResponseRow {
+  id: string;
+  survey_id: string;
+  delphi_round_id: string;
+  panelist_id: string | null;
+  answers: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -224,46 +100,362 @@ function formatDate(iso: string): string {
   });
 }
 
+const statusBadgeVariant: Record<string, "default" | "secondary" | "outline"> = {
+  active: "default",
+  completed: "secondary",
+  draft: "outline",
+};
+
+/**
+ * Compute per-question consensus from responses for a given round.
+ * For each question (schema field), looks at the answers and calculates
+ * the percentage of the most common answer.
+ */
+function computeQuestionConsensus(
+  fields: SurveyField[],
+  responses: ResponseRow[]
+): RoundQuestion[] {
+  if (fields.length === 0) return [];
+
+  return fields.map((field, idx) => {
+    const fieldKey = field.id ?? field.label ?? `q${idx}`;
+    const answersForField: unknown[] = [];
+
+    for (const resp of responses) {
+      const val = resp.answers?.[fieldKey];
+      if (val !== undefined && val !== null && val !== "") {
+        answersForField.push(val);
+      }
+    }
+
+    if (answersForField.length === 0) {
+      return {
+        id: fieldKey,
+        text: field.label ?? `Question ${idx + 1}`,
+        consensusPercent: 0,
+        responseCount: 0,
+      };
+    }
+
+    // Tally frequencies
+    const freq = new Map<string, number>();
+    for (const a of answersForField) {
+      const key = String(a);
+      freq.set(key, (freq.get(key) ?? 0) + 1);
+    }
+
+    const maxFreq = Math.max(...freq.values());
+    const consensusPercent = Math.round(
+      (maxFreq / answersForField.length) * 100
+    );
+
+    return {
+      id: fieldKey,
+      text: field.label ?? `Question ${idx + 1}`,
+      consensusPercent,
+      responseCount: answersForField.length,
+    };
+  });
+}
+
 // ── Page ───────────────────────────────────────────────────────────────
 
-export default function DelphiStudyPage() {
+export default function DelphiStudyPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const { orgId } = useUser();
+
+  const [survey, setSurvey] = useState<Survey | null>(null);
+  const [rounds, setRounds] = useState<DelphiRound[]>([]);
+  const [panelists, setPanelists] = useState<Panelist[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
-  const [rounds, setRounds] = useState(MOCK_ROUNDS);
+  const [mutating, setMutating] = useState(false);
+
+  const supabase = createClient();
+
+  // ── Data fetching ──────────────────────────────────────────────────
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    // Fetch survey
+    const { data: surveyData, error: surveyErr } = await supabase
+      .from("surveys")
+      .select("id, title, description, status, schema, settings, created_at, updated_at")
+      .eq("id", id)
+      .eq("type", "delphi")
+      .single();
+
+    if (surveyErr || !surveyData) {
+      setError(surveyErr?.message ?? "Survey not found");
+      setLoading(false);
+      return;
+    }
+
+    setSurvey(surveyData as Survey);
+
+    // Fetch rounds
+    const { data: roundRows } = await supabase
+      .from("delphi_rounds")
+      .select("*")
+      .eq("survey_id", id)
+      .order("round_number", { ascending: true });
+
+    const typedRounds = (roundRows ?? []) as RoundRow[];
+
+    // Fetch panelists
+    const { data: panelistRows } = await supabase
+      .from("delphi_panelists")
+      .select("*")
+      .eq("survey_id", id)
+      .order("created_at", { ascending: true });
+
+    const typedPanelists = (panelistRows ?? []) as PanelistRow[];
+
+    // Fetch all responses for this survey
+    const { data: responseRows } = await supabase
+      .from("responses")
+      .select("*")
+      .eq("survey_id", id);
+
+    const typedResponses = (responseRows ?? []) as ResponseRow[];
+
+    // Group responses by round
+    const responsesByRound = new Map<string, ResponseRow[]>();
+    for (const resp of typedResponses) {
+      if (!resp.delphi_round_id) continue;
+      const existing = responsesByRound.get(resp.delphi_round_id) ?? [];
+      existing.push(resp);
+      responsesByRound.set(resp.delphi_round_id, existing);
+    }
+
+    // Build schema fields array
+    const fields: SurveyField[] = Array.isArray(surveyData.schema)
+      ? (surveyData.schema as SurveyField[])
+      : [];
+
+    // Map rounds to component format
+    const totalPanelists = typedPanelists.filter(
+      (p) => p.status === "accepted" || p.status === "invited"
+    ).length;
+
+    const mappedRounds: DelphiRound[] = typedRounds.map((r) => {
+      const roundResponses = responsesByRound.get(r.id) ?? [];
+      const questions = computeQuestionConsensus(fields, roundResponses);
+
+      return {
+        id: r.id,
+        number: r.round_number,
+        status: r.status as DelphiRound["status"],
+        startDate: r.starts_at,
+        endDate: r.ends_at,
+        responseCount: roundResponses.length,
+        totalPanelists,
+        questions,
+      };
+    });
+
+    setRounds(mappedRounds);
+
+    // Map panelists — determine response status from latest active/completed round
+    const latestActiveRound = typedRounds.find((r) => r.status === "active");
+    const latestRoundId = latestActiveRound?.id ?? typedRounds[typedRounds.length - 1]?.id;
+    const latestRoundResponses = latestRoundId
+      ? responsesByRound.get(latestRoundId) ?? []
+      : [];
+    const respondedPanelistIds = new Set(
+      latestRoundResponses
+        .filter((r) => r.panelist_id)
+        .map((r) => r.panelist_id!)
+    );
+    const completedPanelistIds = new Set(
+      latestRoundResponses
+        .filter((r) => r.panelist_id && r.status === "completed")
+        .map((r) => r.panelist_id!)
+    );
+
+    const mappedPanelists: Panelist[] = typedPanelists
+      .filter((p) => p.status !== "removed")
+      .map((p) => {
+        let responseStatus: Panelist["responseStatus"] = "not_started";
+        if (completedPanelistIds.has(p.id)) {
+          responseStatus = "completed";
+        } else if (respondedPanelistIds.has(p.id)) {
+          responseStatus = "in_progress";
+        }
+
+        return {
+          id: p.id,
+          name: p.name ?? p.email,
+          email: p.email,
+          expertise: p.expertise ?? "",
+          status: p.status as Panelist["status"],
+          responseStatus,
+        };
+      });
+
+    setPanelists(mappedPanelists);
+    setLoading(false);
+  }, [id, supabase]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // ── Mutations ──────────────────────────────────────────────────────
+
+  async function handleStartRound() {
+    if (mutating || !survey) return;
+    setMutating(true);
+
+    const nextNumber =
+      rounds.length > 0
+        ? Math.max(...rounds.map((r) => r.number)) + 1
+        : 1;
+
+    const { data, error: insertErr } = await supabase
+      .from("delphi_rounds")
+      .insert({
+        survey_id: survey.id,
+        round_number: nextNumber,
+        status: "active",
+        starts_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      console.error("Failed to start round:", insertErr.message);
+      setMutating(false);
+      return;
+    }
+
+    // Re-fetch to get fresh data
+    await fetchData();
+    setMutating(false);
+  }
+
+  async function handleCloseRound(roundId: string) {
+    if (mutating) return;
+    setMutating(true);
+
+    const { error: updateErr } = await supabase
+      .from("delphi_rounds")
+      .update({
+        status: "completed",
+        ends_at: new Date().toISOString(),
+      })
+      .eq("id", roundId);
+
+    if (updateErr) {
+      console.error("Failed to close round:", updateErr.message);
+      setMutating(false);
+      return;
+    }
+
+    await fetchData();
+    setMutating(false);
+  }
+
+  async function handleInvitePanelist(
+    panelist: Omit<Panelist, "id" | "status" | "responseStatus">
+  ) {
+    if (mutating || !survey) return;
+    setMutating(true);
+
+    const token = crypto.randomUUID();
+
+    const { error: insertErr } = await supabase
+      .from("delphi_panelists")
+      .insert({
+        survey_id: survey.id,
+        email: panelist.email,
+        name: panelist.name,
+        expertise: panelist.expertise,
+        token,
+        status: "invited",
+        invited_at: new Date().toISOString(),
+      });
+
+    if (insertErr) {
+      console.error("Failed to invite panelist:", insertErr.message);
+      setMutating(false);
+      return;
+    }
+
+    await fetchData();
+    setMutating(false);
+  }
+
+  async function handleRemovePanelist(panelistId: string) {
+    if (mutating) return;
+    setMutating(true);
+
+    const { error: updateErr } = await supabase
+      .from("delphi_panelists")
+      .update({ status: "removed" })
+      .eq("id", panelistId);
+
+    if (updateErr) {
+      console.error("Failed to remove panelist:", updateErr.message);
+      setMutating(false);
+      return;
+    }
+
+    await fetchData();
+    setMutating(false);
+  }
+
+  // ── Derived data ───────────────────────────────────────────────────
 
   const overallConsensus = Math.round(
     rounds
-      .filter((r) => r.status !== "pending")
+      .filter((r) => r.status !== "pending" && r.questions.length > 0)
       .flatMap((r) => r.questions)
-      .reduce((sum, q, _, arr) => sum + q.consensusPercent / arr.length, 0)
+      .reduce((sum, q, _, arr) => sum + q.consensusPercent / (arr.length || 1), 0)
   );
 
-  function handleStartRound(roundId: string) {
-    setRounds((prev) =>
-      prev.map((r) =>
-        r.id === roundId
-          ? {
-              ...r,
-              status: "active" as const,
-              startDate: new Date().toISOString(),
-            }
-          : r
-      )
+  const fields: SurveyField[] = Array.isArray(survey?.schema)
+    ? (survey.schema as SurveyField[])
+    : [];
+
+  const activeRound = rounds.find((r) => r.status === "active");
+  const acceptedPanelists = panelists.filter((p) => p.status === "accepted");
+  const targetConsensus =
+    (survey?.settings as Record<string, unknown>)?.consensus_threshold != null
+      ? Number((survey?.settings as Record<string, unknown>).consensus_threshold) * 100
+      : 70;
+
+  // ── Loading state ──────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
-  function handleCloseRound(roundId: string) {
-    setRounds((prev) =>
-      prev.map((r) =>
-        r.id === roundId
-          ? {
-              ...r,
-              status: "completed" as const,
-              endDate: new Date().toISOString(),
-            }
-          : r
-      )
+  if (error || !survey) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <p className="text-sm text-destructive">
+          {error ?? "Survey not found"}
+        </p>
+        <Link href="/delphi">
+          <Button variant="outline">Back to Studies</Button>
+        </Link>
+      </div>
     );
   }
+
+  // ── Render ─────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -280,12 +472,18 @@ export default function DelphiStudyPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight">
-                {STUDY.title}
+                {survey.title}
               </h1>
-              <Badge variant="default">Active</Badge>
+              <Badge
+                variant={
+                  statusBadgeVariant[survey.status] ?? "outline"
+                }
+              >
+                {survey.status.charAt(0).toUpperCase() + survey.status.slice(1)}
+              </Badge>
             </div>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              {STUDY.description}
+              {survey.description ?? "No description"}
             </p>
           </div>
           <Button variant="outline" className="shrink-0 gap-2">
@@ -328,25 +526,25 @@ export default function DelphiStudyPage() {
                     {
                       icon: Target,
                       label: "Target Consensus",
-                      value: `${STUDY.targetConsensus}%`,
+                      value: `${targetConsensus}%`,
                       color: "text-blue-500",
                     },
                     {
                       icon: BarChart3,
                       label: "Questions",
-                      value: STUDY.questionCount.toString(),
+                      value: fields.length.toString(),
                       color: "text-purple-500",
                     },
                     {
                       icon: Users,
                       label: "Active Panelists",
-                      value: `${MOCK_PANELISTS.filter((p) => p.status === "accepted").length}`,
+                      value: `${acceptedPanelists.length}`,
                       color: "text-green-500",
                     },
                     {
                       icon: TrendingUp,
                       label: "Current Round",
-                      value: `${rounds.filter((r) => r.status === "active")[0]?.number ?? "--"} of ${rounds.length}`,
+                      value: `${activeRound?.number ?? "--"} of ${rounds.length}`,
                       color: "text-orange-500",
                     },
                   ].map((metric) => (
@@ -376,16 +574,25 @@ export default function DelphiStudyPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {[
-                  { label: "Methodology", value: STUDY.methodology },
-                  { label: "Created", value: formatDate(STUDY.createdAt) },
-                  { label: "Started", value: formatDate(STUDY.startedAt) },
                   {
-                    label: "Est. Completion",
-                    value: formatDate(STUDY.estimatedCompletion),
+                    label: "Created",
+                    value: formatDate(survey.created_at),
+                  },
+                  {
+                    label: "Last Updated",
+                    value: formatDate(survey.updated_at),
                   },
                   {
                     label: "Target Consensus",
-                    value: `${STUDY.targetConsensus}% agreement`,
+                    value: `${targetConsensus}% agreement`,
+                  },
+                  {
+                    label: "Total Rounds",
+                    value: rounds.length.toString(),
+                  },
+                  {
+                    label: "Total Panelists",
+                    value: panelists.length.toString(),
                   },
                 ].map((item) => (
                   <div
@@ -405,6 +612,11 @@ export default function DelphiStudyPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
+                  {rounds.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      No rounds yet. Start your first round from the Rounds tab.
+                    </p>
+                  )}
                   {rounds.map((round) => {
                     const avgConsensus =
                       round.questions.length > 0
@@ -448,7 +660,7 @@ export default function DelphiStudyPage() {
                             </p>
                           </div>
                         </div>
-                        {round.status !== "pending" && (
+                        {round.status !== "pending" && round.questions.length > 0 && (
                           <Badge
                             variant={
                               avgConsensus >= 75 ? "default" : "secondary"
@@ -470,7 +682,14 @@ export default function DelphiStudyPage() {
         <TabsContent value="rounds">
           <RoundManager
             rounds={rounds}
-            onStartRound={handleStartRound}
+            onStartRound={
+              // RoundManager expects (roundId: string) => void for starting
+              // But we create a new round, so we adapt:
+              // If there's a pending round, start it; otherwise create new
+              (_roundId: string) => {
+                handleStartRound();
+              }
+            }
             onCloseRound={handleCloseRound}
           />
         </TabsContent>
@@ -478,10 +697,13 @@ export default function DelphiStudyPage() {
         {/* ── Panel ───────────────────────────────────────────────── */}
         <TabsContent value="panel">
           <PanelManager
-            panelists={MOCK_PANELISTS}
-            onAdd={(p) => console.log("Add panelist:", p)}
-            onRemove={(id) => console.log("Remove panelist:", id)}
-            onInvite={(ids) => console.log("Invite panelists:", ids)}
+            panelists={panelists}
+            onAdd={handleInvitePanelist}
+            onRemove={handleRemovePanelist}
+            onInvite={(ids) => {
+              // Bulk re-invite: no-op for now since panelists are already invited on add
+              console.log("Bulk invite:", ids);
+            }}
           />
         </TabsContent>
 

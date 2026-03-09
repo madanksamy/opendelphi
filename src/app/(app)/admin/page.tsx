@@ -1,23 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import {
   Building2,
   Users,
   ClipboardList,
   MessageSquare,
-  CreditCard,
-  DollarSign,
   Activity,
-  Database,
-  HardDrive,
   Clock,
-  ArrowUpRight,
   TrendingUp,
   Shield,
   Settings,
   UserPlus,
+  ArrowUpRight,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -28,133 +24,156 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
+import { createClient } from "@/lib/supabase/client";
 
-const platformStats = [
-  {
-    label: "Total Organizations",
-    value: "142",
-    change: "+8 this month",
-    icon: Building2,
-    color: "bg-violet-500/10 text-violet-600",
-  },
-  {
-    label: "Total Users",
-    value: "1,247",
-    change: "+63 this month",
-    icon: Users,
-    color: "bg-blue-500/10 text-blue-600",
-  },
-  {
-    label: "Total Surveys",
-    value: "3,891",
-    change: "+214 this month",
-    icon: ClipboardList,
-    color: "bg-emerald-500/10 text-emerald-600",
-  },
-  {
-    label: "Total Responses",
-    value: "284,192",
-    change: "+18,420 this month",
-    icon: MessageSquare,
-    color: "bg-amber-500/10 text-amber-600",
-  },
-  {
-    label: "Active Subscriptions",
-    value: "89",
-    change: "62.7% conversion",
-    icon: CreditCard,
-    color: "bg-pink-500/10 text-pink-600",
-  },
-  {
-    label: "Monthly Recurring Revenue",
-    value: "$8,420",
-    change: "+12% MoM",
-    icon: DollarSign,
-    color: "bg-green-500/10 text-green-600",
-  },
-];
+// ── Types ─────────────────────────────────────────────────────────────
 
-const userGrowthData = [
-  { month: "Apr", users: 120 },
-  { month: "May", users: 185 },
-  { month: "Jun", users: 264 },
-  { month: "Jul", users: 340 },
-  { month: "Aug", users: 425 },
-  { month: "Sep", users: 520 },
-  { month: "Oct", users: 648 },
-  { month: "Nov", users: 780 },
-  { month: "Dec", users: 892 },
-  { month: "Jan", users: 1020 },
-  { month: "Feb", users: 1184 },
-  { month: "Mar", users: 1247 },
-];
-
-const revenueByPlan = [
-  { name: "Pro", value: 4060, color: "#6366f1" },
-  { name: "Business", value: 3160, color: "#8b5cf6" },
-  { name: "Enterprise", value: 1200, color: "#a78bfa" },
-];
-
-const recentSignups = [
-  { id: "1", name: "Olivia Martinez", email: "olivia@medresearch.com", org: "MedResearch Inc", plan: "Pro", date: "2026-03-08" },
-  { id: "2", name: "Liam Johnson", email: "liam@techsurveys.io", org: "TechSurveys", plan: "Business", date: "2026-03-08" },
-  { id: "3", name: "Emma Wilson", email: "emma@healthdata.org", org: "HealthData Org", plan: "Free", date: "2026-03-07" },
-  { id: "4", name: "Noah Brown", email: "noah@academiapoll.edu", org: "Academia Poll", plan: "Pro", date: "2026-03-07" },
-  { id: "5", name: "Ava Davis", email: "ava@govfeedback.gov", org: "GovFeedback", plan: "Enterprise", date: "2026-03-06" },
-  { id: "6", name: "James Garcia", email: "james@startupmetrics.co", org: "StartupMetrics", plan: "Pro", date: "2026-03-06" },
-  { id: "7", name: "Sophia Miller", email: "sophia@clinicaltrial.net", org: "ClinicalTrial Net", plan: "Business", date: "2026-03-05" },
-  { id: "8", name: "Benjamin Lee", email: "ben@urbanplan.city", org: "UrbanPlan", plan: "Free", date: "2026-03-05" },
-  { id: "9", name: "Mia Anderson", email: "mia@nonprofitvoice.org", org: "NonProfit Voice", plan: "Pro", date: "2026-03-04" },
-  { id: "10", name: "Lucas Thomas", email: "lucas@retailpulse.com", org: "RetailPulse", plan: "Free", date: "2026-03-04" },
-];
-
-const healthIndicators = [
-  {
-    label: "API Latency (p95)",
-    value: "42ms",
-    status: "healthy" as const,
-    icon: Activity,
-  },
-  {
-    label: "DB Connections",
-    value: "24 / 100",
-    status: "healthy" as const,
-    icon: Database,
-  },
-  {
-    label: "Storage Usage",
-    value: "148 GB / 500 GB",
-    status: "healthy" as const,
-    icon: HardDrive,
-  },
-  {
-    label: "Uptime (30d)",
-    value: "99.98%",
-    status: "healthy" as const,
-    icon: Clock,
-  },
-];
-
-function getPlanColor(plan: string) {
-  switch (plan) {
-    case "Free":
-      return "bg-gray-500/10 text-gray-600";
-    case "Pro":
-      return "bg-indigo-500/10 text-indigo-600";
-    case "Business":
-      return "bg-violet-500/10 text-violet-600";
-    case "Enterprise":
-      return "bg-amber-500/10 text-amber-600";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
+interface PlatformStat {
+  label: string;
+  value: string;
+  icon: React.ElementType;
+  color: string;
 }
 
+interface UserGrowthPoint {
+  month: string;
+  users: number;
+}
+
+interface RecentUser {
+  id: string;
+  full_name: string | null;
+  email: string;
+  created_at: string;
+}
+
+// ── Component ─────────────────────────────────────────────────────────
+
 export default function AdminPage() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<PlatformStat[]>([]);
+  const [growthData, setGrowthData] = useState<UserGrowthPoint[]>([]);
+  const [recentUsers, setRecentUsers] = useState<RecentUser[]>([]);
+  const [growthPercent, setGrowthPercent] = useState<string>("");
+
+  useEffect(() => {
+    async function loadAdminData() {
+      const supabase = createClient();
+
+      // Run all count queries in parallel
+      const [
+        orgsRes,
+        usersRes,
+        surveysRes,
+        responsesRes,
+        activeSurveysRes,
+        profilesForGrowthRes,
+        recentSignupsRes,
+      ] = await Promise.all([
+        supabase.from("organizations").select("id", { count: "exact", head: true }),
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("surveys").select("id", { count: "exact", head: true }),
+        supabase.from("responses").select("id", { count: "exact", head: true }),
+        supabase.from("surveys").select("id", { count: "exact", head: true }).eq("status", "published"),
+        supabase.from("profiles").select("created_at").order("created_at", { ascending: true }),
+        supabase.from("profiles").select("id, full_name, email, created_at").order("created_at", { ascending: false }).limit(10),
+      ]);
+
+      const totalOrgs = orgsRes.count ?? 0;
+      const totalUsers = usersRes.count ?? 0;
+      const totalSurveys = surveysRes.count ?? 0;
+      const totalResponses = responsesRes.count ?? 0;
+      const activeSurveys = activeSurveysRes.count ?? 0;
+
+      setStats([
+        {
+          label: "Total Organizations",
+          value: totalOrgs.toLocaleString(),
+          icon: Building2,
+          color: "bg-violet-500/10 text-violet-600",
+        },
+        {
+          label: "Total Users",
+          value: totalUsers.toLocaleString(),
+          icon: Users,
+          color: "bg-blue-500/10 text-blue-600",
+        },
+        {
+          label: "Total Surveys",
+          value: totalSurveys.toLocaleString(),
+          icon: ClipboardList,
+          color: "bg-emerald-500/10 text-emerald-600",
+        },
+        {
+          label: "Total Responses",
+          value: totalResponses.toLocaleString(),
+          icon: MessageSquare,
+          color: "bg-amber-500/10 text-amber-600",
+        },
+        {
+          label: "Active Surveys",
+          value: activeSurveys.toLocaleString(),
+          icon: Activity,
+          color: "bg-pink-500/10 text-pink-600",
+        },
+      ]);
+
+      // Build user growth by month
+      const profiles = profilesForGrowthRes.data ?? [];
+      const monthCounts = new Map<string, number>();
+      let runningTotal = 0;
+      for (const p of profiles) {
+        const d = new Date(p.created_at);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        runningTotal++;
+        monthCounts.set(key, runningTotal);
+      }
+
+      const months = Array.from(monthCounts.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-12);
+
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const chartData: UserGrowthPoint[] = months.map(([key, count]) => {
+        const monthIdx = parseInt(key.split("-")[1], 10) - 1;
+        return { month: monthNames[monthIdx], users: count };
+      });
+      setGrowthData(chartData);
+
+      if (chartData.length >= 2) {
+        const first = chartData[0].users;
+        const last = chartData[chartData.length - 1].users;
+        if (first > 0) {
+          const pct = Math.round(((last - first) / first) * 100);
+          setGrowthPercent(`+${pct}%`);
+        }
+      }
+
+      // Recent signups
+      setRecentUsers(
+        (recentSignupsRes.data ?? []).map((row: { id: string; full_name: string | null; email: string; created_at: string }) => ({
+          id: row.id,
+          full_name: row.full_name,
+          email: row.email,
+          created_at: row.created_at,
+        }))
+      );
+
+      setLoading(false);
+    }
+
+    loadAdminData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       {/* Header */}
@@ -176,7 +195,7 @@ export default function AdminPage() {
 
       {/* Platform Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {platformStats.map((stat) => (
+        {stats.map((stat) => (
           <div
             key={stat.label}
             className="rounded-2xl border border-border bg-card p-6"
@@ -194,32 +213,32 @@ export default function AdminPage() {
                 {stat.value}
               </span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{stat.change}</p>
           </div>
         ))}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* User Growth Chart */}
-        <div className="rounded-2xl border border-border bg-card lg:col-span-2">
+      {/* User Growth Chart */}
+      {growthData.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <div>
               <h2 className="text-base font-semibold text-card-foreground">
                 User Growth
               </h2>
               <p className="text-xs text-muted-foreground">
-                Total registered users over 12 months
+                Total registered users over time
               </p>
             </div>
-            <div className="flex items-center gap-1 text-sm font-medium text-emerald-600">
-              <TrendingUp className="h-4 w-4" />
-              +938%
-            </div>
+            {growthPercent && (
+              <div className="flex items-center gap-1 text-sm font-medium text-emerald-600">
+                <TrendingUp className="h-4 w-4" />
+                {growthPercent}
+              </div>
+            )}
           </div>
           <div className="p-6">
             <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={userGrowthData}>
+              <LineChart data={growthData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(var(--border))"
@@ -256,87 +275,7 @@ export default function AdminPage() {
             </ResponsiveContainer>
           </div>
         </div>
-
-        {/* Revenue by Plan */}
-        <div className="rounded-2xl border border-border bg-card">
-          <div className="border-b border-border px-6 py-4">
-            <h2 className="text-base font-semibold text-card-foreground">
-              Revenue by Plan
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              MRR breakdown by subscription tier
-            </p>
-          </div>
-          <div className="flex flex-col items-center p-6">
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={revenueByPlan}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={4}
-                  dataKey="value"
-                  strokeWidth={0}
-                >
-                  {revenueByPlan.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "12px",
-                    fontSize: "13px",
-                  }}
-                  formatter={(value) => [`$${value}`, "Revenue"]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-2 flex gap-4">
-              {revenueByPlan.map((entry) => (
-                <div key={entry.name} className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: entry.color }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {entry.name} (${entry.value.toLocaleString()})
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* System Health */}
-      <div>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          System Health
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {healthIndicators.map((item) => (
-            <div
-              key={item.label}
-              className="flex items-center gap-4 rounded-2xl border border-border bg-card p-5"
-            >
-              <div className="rounded-xl bg-emerald-500/10 p-2.5">
-                <item.icon className="h-5 w-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{item.label}</p>
-                <p className="text-sm font-semibold text-card-foreground">
-                  {item.value}
-                </p>
-              </div>
-              <span className="ml-auto h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Quick Actions */}
       <div>
@@ -347,10 +286,6 @@ export default function AdminPage() {
           <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-accent">
             <Users className="h-4 w-4 text-muted-foreground" />
             View All Users
-          </button>
-          <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-accent">
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-            Manage Plans
           </button>
           <button className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground transition-colors hover:bg-accent">
             <Settings className="h-4 w-4 text-muted-foreground" />
@@ -379,10 +314,6 @@ export default function AdminPage() {
               </p>
             </div>
           </div>
-          <button className="flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80">
-            View all
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -391,19 +322,23 @@ export default function AdminPage() {
                 <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   User
                 </th>
-                <th className="hidden px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground sm:table-cell">
-                  Organization
-                </th>
-                <th className="px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Plan
-                </th>
                 <th className="hidden px-6 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground md:table-cell">
                   Joined
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {recentSignups.map((user) => (
+              {recentUsers.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={2}
+                    className="px-6 py-8 text-center text-sm text-muted-foreground"
+                  >
+                    No users yet.
+                  </td>
+                </tr>
+              )}
+              {recentUsers.map((user) => (
                 <tr
                   key={user.id}
                   className="transition-colors hover:bg-muted/50"
@@ -411,27 +346,18 @@ export default function AdminPage() {
                   <td className="px-6 py-3">
                     <div>
                       <p className="text-sm font-medium text-card-foreground">
-                        {user.name}
+                        {user.full_name || "Unnamed"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {user.email}
                       </p>
                     </div>
                   </td>
-                  <td className="hidden px-6 py-3 text-sm text-muted-foreground sm:table-cell">
-                    {user.org}
-                  </td>
-                  <td className="px-6 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${getPlanColor(user.plan)}`}
-                    >
-                      {user.plan}
-                    </span>
-                  </td>
                   <td className="hidden px-6 py-3 text-sm text-muted-foreground md:table-cell">
-                    {new Date(user.date).toLocaleDateString("en-US", {
+                    {new Date(user.created_at).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
+                      year: "numeric",
                     })}
                   </td>
                 </tr>
