@@ -1,13 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
-import { useUIStore } from "@/stores/ui-store";
 import { useUser } from "@/components/providers/UserProvider";
 import {
   Brain,
-  ChevronLeft,
   ClipboardList,
   Hexagon,
   LayoutDashboard,
@@ -16,18 +13,26 @@ import {
   Settings,
   Sparkles,
 } from "lucide-react";
+import {
+  Sidebar as AceternitySidebar,
+  SidebarBody,
+  SidebarLink,
+} from "@/components/ui/sidebar";
+import { useState } from "react";
+import { motion } from "framer-motion";
+import Link from "next/link";
 
 const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Surveys", href: "/surveys", icon: ClipboardList },
-  { label: "Delphi", href: "/delphi", icon: Brain },
-  { label: "Templates", href: "/templates", icon: LayoutTemplate },
-  { label: "AI Studio", href: "/ai-studio", icon: Sparkles },
-  { label: "Integrations", href: "/integrations", icon: Plug },
+  { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard className="h-5 w-5 shrink-0" /> },
+  { label: "Surveys", href: "/surveys", icon: <ClipboardList className="h-5 w-5 shrink-0" /> },
+  { label: "Delphi", href: "/delphi", icon: <Brain className="h-5 w-5 shrink-0" /> },
+  { label: "Templates", href: "/templates", icon: <LayoutTemplate className="h-5 w-5 shrink-0" /> },
+  { label: "AI Studio", href: "/ai-studio", icon: <Sparkles className="h-5 w-5 shrink-0" /> },
+  { label: "Integrations", href: "/integrations", icon: <Plug className="h-5 w-5 shrink-0" /> },
 ];
 
 const bottomItems = [
-  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Settings", href: "/settings", icon: <Settings className="h-5 w-5 shrink-0" /> },
 ];
 
 function getInitials(name: string | null | undefined, email: string | null | undefined): string {
@@ -42,119 +47,108 @@ function getInitials(name: string | null | undefined, email: string | null | und
 
 export function Sidebar() {
   const pathname = usePathname();
-  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const { profile, loading } = useUser();
+  const [open, setOpen] = useState(false);
 
   const displayName = profile?.full_name || profile?.email?.split("@")[0] || "User";
   const displayEmail = profile?.email || "";
   const initials = getInitials(profile?.full_name, profile?.email);
 
   return (
-    <aside
-      className={cn(
-        "flex h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300",
-        sidebarOpen ? "w-64" : "w-[68px]"
-      )}
-    >
-      {/* Logo */}
-      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-        <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
-          <Hexagon className="h-7 w-7 shrink-0 text-primary" strokeWidth={2.5} />
-          {sidebarOpen && (
-            <span className="text-lg font-bold tracking-tight text-foreground">
+    <AceternitySidebar open={open} setOpen={setOpen} animate={true}>
+      <SidebarBody
+        className={cn(
+          "justify-between gap-6 border-r border-sidebar-border bg-sidebar"
+        )}
+      >
+        <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden">
+          {/* Logo */}
+          <Link
+            href="/dashboard"
+            className="relative z-20 flex items-center gap-2.5 py-1"
+          >
+            <Hexagon
+              className="h-7 w-7 shrink-0 text-primary"
+              strokeWidth={2.5}
+            />
+            <motion.span
+              animate={{
+                display: open ? "inline-block" : "none",
+                opacity: open ? 1 : 0,
+              }}
+              className="whitespace-pre text-lg font-bold tracking-tight text-foreground"
+            >
               OpenDelphi
-            </span>
-          )}
-        </Link>
-        <button
-          onClick={toggleSidebar}
-          className={cn(
-            "rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
-            !sidebarOpen && "hidden"
-          )}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-      </div>
+            </motion.span>
+          </Link>
 
-      {/* Main Nav */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={!sidebarOpen ? item.label : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-              )}
-            >
-              <item.icon
-                className={cn(
-                  "h-5 w-5 shrink-0",
-                  isActive ? "text-primary" : "text-muted-foreground"
-                )}
-              />
-              {sidebarOpen && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Bottom Nav */}
-      <div className="border-t border-sidebar-border px-3 py-4">
-        {bottomItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={!sidebarOpen ? item.label : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-              )}
-            >
-              <item.icon
-                className={cn(
-                  "h-5 w-5 shrink-0",
-                  isActive ? "text-primary" : "text-muted-foreground"
-                )}
-              />
-              {sidebarOpen && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
-
-        {/* User */}
-        <div
-          className={cn(
-            "mt-3 flex items-center gap-3 rounded-xl px-3 py-2.5",
-            !sidebarOpen && "justify-center px-0"
-          )}
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-            {loading ? "..." : initials}
+          {/* Main Nav */}
+          <div className="mt-8 flex flex-col gap-1">
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.href ||
+                pathname.startsWith(item.href + "/");
+              return (
+                <SidebarLink
+                  key={item.href}
+                  link={item}
+                  className={cn(
+                    "rounded-xl px-3 py-2.5 transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-foreground [&_svg]:text-primary [&_span]:!text-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent/60 [&_svg]:text-muted-foreground"
+                  )}
+                />
+              );
+            })}
           </div>
-          {sidebarOpen && (
-            <div className="min-w-0 flex-1">
+        </div>
+
+        {/* Bottom section */}
+        <div className="flex flex-col gap-1 border-t border-sidebar-border pt-4">
+          {bottomItems.map((item) => {
+            const isActive =
+              pathname === item.href ||
+              pathname.startsWith(item.href + "/");
+            return (
+              <SidebarLink
+                key={item.href}
+                link={item}
+                className={cn(
+                  "rounded-xl px-3 py-2.5 transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-foreground [&_svg]:text-primary [&_span]:!text-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/60 [&_svg]:text-muted-foreground"
+                )}
+              />
+            );
+          })}
+
+          {/* User profile */}
+          <Link
+            href="/settings"
+            className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-sidebar-accent/60"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+              {loading ? "..." : initials}
+            </div>
+            <motion.div
+              animate={{
+                display: open ? "block" : "none",
+                opacity: open ? 1 : 0,
+              }}
+              className="min-w-0 flex-1"
+            >
               <p className="truncate text-sm font-medium text-foreground">
                 {loading ? "Loading..." : displayName}
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 {loading ? "" : displayEmail}
               </p>
-            </div>
-          )}
+            </motion.div>
+          </Link>
         </div>
-      </div>
-    </aside>
+      </SidebarBody>
+    </AceternitySidebar>
   );
 }

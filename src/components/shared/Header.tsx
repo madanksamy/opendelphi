@@ -1,14 +1,12 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useUIStore } from "@/stores/ui-store";
 import { useUser } from "@/components/providers/UserProvider";
 import {
   Bell,
   ChevronRight,
   Globe,
   LogOut,
-  Menu,
   Search,
   Settings,
   User,
@@ -41,8 +39,6 @@ function getInitials(name: string | null | undefined, email: string | null | und
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const breadcrumbs = getBreadcrumbs(pathname);
   const { profile, signOut, loading } = useUser();
 
@@ -77,16 +73,6 @@ export function Header() {
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-4 lg:px-6">
-      {/* Sidebar toggle */}
-      {!sidebarOpen && (
-        <button
-          onClick={toggleSidebar}
-          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      )}
-
       {/* Breadcrumbs */}
       <nav className="hidden items-center gap-1.5 text-sm sm:flex">
         {breadcrumbs.map((crumb) => (
